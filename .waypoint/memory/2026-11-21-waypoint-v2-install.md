@@ -1,0 +1,3 @@
+Waypoint v2 (w-p/waypoint@f9f0080, branch v2) installed with the Claude Code adapter; no CONOPS yet.
+
+- **2026-11-21:** Ran `waypoint install-claude` from a temporary clone of the `v2` branch. Created `.waypoint/` (opord, sop, project, conops-template, 9 core skills, VERSION), `.claude/rules/waypoint.md`, `.claude/hooks/waypoint-*.sh`, and `.claude/settings.json` (hook wiring). Nothing committed yet; repo had no prior commits. Next step: write the CONOPS via `.waypoint/skills/new-project.md`. Note: VERSION records the origin URL but not the branch — updates should pull from `v2`, not the default branch.

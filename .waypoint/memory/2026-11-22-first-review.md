@@ -1,0 +1,11 @@
+First review of the running app: reworked into an htop/bpytop-style screen with panels, gauges, an hourly token graph, unit bars and spring animation.
+
+- **2026-11-22 (developer):** "Neat." Asked for: no `esc` (or other key hints) at the top of any view; the selection as a whole-row bright background; a blank row above the recent divider like the one above the detail pane; a look inspired by htop and bpytop, using Lip Gloss and Harmonica; "let's get creative."
+- Took "highlighting should highlight the whole row with a bright background" as the selection bar, and also gave flagged rows a faint red tint; flagged to the developer in case the request meant the flagged rows.
+- Rework: rounded panels with titles set into the border; top row of status, runs (progress gauges in eighths of a cell, colored by state) and tokens (24 hourly bars in a teal-to-violet gradient, red kept for flags); the board with a filled header bar, full-width rows, a bright cyan selection bar, unit bars (one glyph per unit, a distinct shape per status), subagent dots, and a mark column with a pulsing `!`, a spinner, `‖`, `·` or `✓`; keys only on an htop-style bar at the bottom, `esc All` only while focused. Harmonica springs fill gauges and raise the token bars; 10 frames a second for the spinner, 30 while a spring moves; `-once` draws at rest.
+- Narrow terminals now drop columns (tool, started, model, job, tokens, subagents, elapsed, kind), settling `conops.md` §8 #3 provisionally. Under 30 rows the top panels shrink to one line.
+- Model: added `Machine.Spend` (token totals reported in the last 24 hours, with times) for the graph.
+- Added Harmonica to the OPORD's allowed dependencies (the developer asked for it by name). Tests added for the springs and the column layout; all pass.
+- Checked by rendering frames to PNG with a throwaway ANSI renderer in the session scratchpad (not in the repo): fixtures at 11-21 14:02 at 200, 150 and 26-row sizes, focused, no-color, and a live replay at 200 and 140 columns.
+- Nothing committed. Waiting on the second review.
+- **2026-11-22 (developer):** "This is much, much better. Love it." The htop/bpytop direction is confirmed. The red-tint-versus-bright-background question on flagged rows wasn't answered, so the current split stays (bright bar for the selection, faint tint for flags).

@@ -1,0 +1,7 @@
+# Fixtures built from real local sessions: they name real projects and a home path. Never commit.
+# Anchored so Go's per-package testdata/ folders stay tracked.
+/testdata/
+
+# Build output
+/waypoint-ops
+/dist/
