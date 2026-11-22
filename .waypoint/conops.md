@@ -161,10 +161,11 @@ The first screen. A mockup is in `.waypoint/design/mockups/overview.py` (run it 
   subagents, memory writes, compactions, and transcript activity where a reader exists.
 - **Width:** the board fills the terminal. Below roughly 175 columns, low-priority columns drop
   out in a fixed order.
-- **Color:** state only, from the terminal's 16-color palette so it follows the theme: red for
-  flagged, yellow for waiting or silent, green for active or done, cyan for project names, dim for
-  secondary details and finished work. Off with `--no-color` or `NO_COLOR`, where the flag mark and
-  status words carry the meaning alone.
+- **Color:** a fixed palette (truecolor, stepped down on lesser terminals): red for flagged and
+  nothing else, amber for waiting or silent, green for active or done, blue for running units, cyan
+  for project names, dim for secondary details and finished work; gauges and graphs use their own
+  cool gradient (`design/first-slice.md`). Off with `--no-color` or `NO_COLOR`, where marks, glyph
+  shapes and status words carry the meaning alone.
 
 ### 5f. Focus
 

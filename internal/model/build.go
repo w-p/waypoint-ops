@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/w-p/waypoint-ops/internal/events"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 // Options control how a snapshot is built.
@@ -24,6 +25,9 @@ type Options struct {
 
 	// Alive reports whether a process is running. Nil uses the operating system.
 	Alive func(pid int) bool
+
+	// Activity is what transcript readers found, by transcript path as the events give it.
+	Activity map[string]*transcript.Activity
 }
 
 // ProcessAlive reports whether pid names a running process. A process owned by another user
@@ -217,6 +221,7 @@ func (b *builder) addSession(e events.Event) {
 		s.Model = e.Model
 		if e.Transcript != nil {
 			s.Transcript = e.Transcript.Path
+			s.TranscriptFormat = e.Transcript.Format
 		}
 	case events.SessionCompacted:
 		s.Compactions++
@@ -333,7 +338,19 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 
 	for _, id := range b.ids {
 		s := b.sessions[id]
-		if s.Tokens != nil && !s.joined {
+		if a := opt.Activity[s.Transcript]; a != nil && s.Transcript != "" && !s.joined {
+			// The transcript says when tokens were used, not just how many at the end.
+			s.Activity = a
+			if a.Last.After(s.Last) {
+				s.Last = a.Last
+			}
+			for _, sp := range a.Spend {
+				if today(sp.At) {
+					snap.Machine.TokensToday[s.Tool.Name] += sp.Tokens
+				}
+				spend(sp.At, s.Tool.Name, sp.Tokens)
+			}
+		} else if s.Tokens != nil && !s.joined {
 			if today(s.Ended) {
 				snap.Machine.TokensToday[s.Tool.Name] += s.Tokens.Total()
 			}
@@ -354,10 +371,7 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 		}
 		item := &Item{Project: b.project, Session: s, Last: s.Last}
 		if s.Open() {
-			item.Category = Active
-			if opt.Now.Sub(s.Last) > opt.Quiet {
-				item.Category = Quiet
-			}
+			item.Category = sessionCategory(s, opt)
 			if s.Kind == events.Interactive {
 				snap.Machine.SessionsOpen++
 			}
@@ -367,6 +381,25 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 		item.Category = Quiet
 		snap.Recent = append(snap.Recent, item)
 	}
+}
+
+// sessionCategory places an open session: with a transcript reader, working is active and a
+// finished turn is waiting; without one, any event within the quiet threshold is active.
+func sessionCategory(s *Session, opt Options) Category {
+	silent := opt.Now.Sub(s.Last) > opt.Quiet
+	if a := s.Activity; a != nil {
+		switch {
+		case a.Turn == transcript.Idle:
+			return Waiting
+		case a.Turn == transcript.Working && !silent:
+			return Active
+		}
+		return Quiet
+	}
+	if silent {
+		return Quiet
+	}
+	return Active
 }
 
 func runItem(r *Run) *Item {

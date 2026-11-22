@@ -10,6 +10,7 @@ import (
 	"github.com/charmbracelet/harmonica"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/model"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 // Options configure the app.
@@ -24,7 +25,8 @@ type Options struct {
 	// stood then.
 	Clock func() time.Time
 
-	// Still turns animation off: gauges and graphs are drawn at their values straight away.
+	// Still turns animation off: gauges and graphs are drawn at their values straight away, and
+	// transcripts are read before the first frame instead of in the background.
 	Still bool
 }
 
@@ -47,7 +49,19 @@ type App struct {
 	springs map[string]*motion
 	began   time.Time
 	frames  bool
+
+	// errs are problems scanning each project, by project name.
+	errs map[string]string
+
+	// Transcripts: one reader per path, read in the background one batch at a time, and the
+	// activity the last batch found.
+	readers  map[string]*transcript.Reader
+	activity map[string]*transcript.Activity
+	reading  bool
 }
+
+// activityMsg carries what a background batch of transcript reads found.
+type activityMsg map[string]*transcript.Activity
 
 // motion is one animated value.
 type motion struct {
@@ -72,30 +86,103 @@ func New(opt Options) *App {
 		spring:  harmonica.NewSpring(harmonica.FPS(fps), 5.0, 0.6),
 		springs: map[string]*motion{},
 		began:   time.Now(),
+
+		readers:  map[string]*transcript.Reader{},
+		activity: map[string]*transcript.Activity{},
 	}
-	a.load()
+	a.scan()
+	a.build()
+	if opt.Still {
+		if read := a.readTranscripts(); read != nil {
+			a.apply(read().(activityMsg))
+		}
+	}
 	return a
 }
 
-// load rereads every project and rebuilds the snapshot.
-func (a *App) load() {
-	errs := map[string]string{}
+// load rereads every project, rebuilds the snapshot, and returns the command that reads the
+// transcripts it names.
+func (a *App) load() tea.Cmd {
+	a.scan()
+	a.build()
+	return a.readTranscripts()
+}
+
+// scan rereads every project's event files.
+func (a *App) scan() {
+	a.errs = map[string]string{}
 	for _, p := range a.opt.Projects {
 		if err := p.Scan(); err != nil {
-			errs[p.Name] = err.Error()
+			a.errs[p.Name] = err.Error()
 		}
 	}
+}
+
+// build makes the snapshot from what has been read so far.
+func (a *App) build() {
 	a.snap = model.Build(a.opt.Projects, model.Options{
-		Now:    a.opt.Clock(),
-		Recent: a.opt.Recent,
-		Quiet:  a.opt.Quiet,
+		Now:      a.opt.Clock(),
+		Recent:   a.opt.Recent,
+		Quiet:    a.opt.Quiet,
+		Activity: a.activity,
 	})
 	for i, p := range a.snap.Projects {
-		if msg, ok := errs[p.Name]; ok {
+		if msg, ok := a.errs[p.Name]; ok {
 			a.snap.Projects[i].Problems = append(a.snap.Projects[i].Problems, msg)
 		}
 	}
 	a.restore()
+}
+
+// transcriptWindow is how long after a session ends its transcript is still read, so the token
+// graph keeps its times.
+const transcriptWindow = 24 * time.Hour
+
+// readTranscripts returns a command that reads, off the screen's thread, every transcript the
+// snapshot's sessions name in a format with a reader: open sessions, and those that ended within
+// the transcript window. It returns nil while an earlier batch is still reading.
+func (a *App) readTranscripts() tea.Cmd {
+	if a.reading {
+		return nil
+	}
+	now := a.opt.Clock()
+	batch := map[string]*transcript.Reader{}
+	for _, item := range append(append([]*model.Item{}, a.snap.Items...), a.snap.Recent...) {
+		s := item.Session
+		if s == nil || s.Transcript == "" || !transcript.Supported(s.TranscriptFormat) {
+			continue
+		}
+		if !s.Open() && now.Sub(s.Ended) > transcriptWindow {
+			continue
+		}
+		r := a.readers[s.Transcript]
+		if r == nil {
+			r = transcript.NewReader(s.Transcript)
+		}
+		batch[s.Transcript] = r
+	}
+	a.readers = batch // readers no longer wanted are dropped
+	if len(batch) == 0 {
+		return nil
+	}
+	a.reading = true
+	return func() tea.Msg {
+		found := activityMsg{}
+		for path, r := range batch {
+			if r.Read(now) == nil {
+				act := r.Activity()
+				found[path] = &act
+			}
+		}
+		return found
+	}
+}
+
+// apply takes in a finished batch of transcript reads and rebuilds the snapshot with it.
+func (a *App) apply(found activityMsg) {
+	a.reading = false
+	a.activity = found
+	a.build()
 }
 
 // all lists the selectable rows as they are drawn.
@@ -136,7 +223,7 @@ func (a *App) next() tea.Cmd {
 // Init starts the refresh timer and the animation.
 func (a *App) Init() tea.Cmd {
 	a.frames = true
-	return tea.Batch(a.next(), a.frame())
+	return tea.Batch(a.next(), a.frame(), a.readTranscripts())
 }
 
 // frame schedules the next animation frame: fast while a spring is moving, slower when only the
@@ -187,8 +274,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 	case tick:
-		a.load()
-		return a, a.next()
+		return a, tea.Batch(a.next(), a.load())
+	case activityMsg:
+		a.apply(msg)
 	case frame:
 		a.step()
 		return a, a.frame()
@@ -248,6 +336,7 @@ func (a *App) Frame(width, height int) string {
 		cursor:  a.cursor,
 		refresh: a.opt.Refresh.String(),
 		window:  a.opt.Recent,
+		quiet:   a.opt.Quiet,
 		phase:   time.Since(a.began).Seconds(),
 		anim:    a.anim,
 	}
@@ -262,7 +351,6 @@ func (a *App) Focus(project string) {
 
 // Select moves the cursor to row n, as the arrow keys do.
 func (a *App) Select(n int) {
-	a.cursor = n
-	a.restore()
+	a.cursor = max(0, min(n, len(a.all())-1))
 	a.remember()
 }

@@ -23,8 +23,10 @@ type view struct {
 	cursor  int
 	refresh string
 
-	// window is how long finished work stays in view.
+	// window is how long finished work stays in view; quiet is how long an open session may be
+	// silent before it reads as quiet.
 	window time.Duration
+	quiet  time.Duration
 
 	// phase is seconds since the app started, for the spinner and the flag's pulse.
 	phase float64

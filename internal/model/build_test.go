@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/w-p/waypoint-ops/internal/events"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 var t0 = time.Date(2026, 1, 2, 10, 0, 0, 0, time.UTC)
@@ -288,5 +289,59 @@ func TestOrder(t *testing.T) {
 		if got[i] != want[i] {
 			t.Fatalf("got %v, want %v", got, want)
 		}
+	}
+}
+
+func TestSessionActivity(t *testing.T) {
+	withTranscript := func(e *events.Event) {
+		e.Session = &events.Session{ID: "s1", Kind: events.Interactive}
+		e.Transcript = &events.Transcript{Path: "/t/s1.jsonl", Format: transcript.FormatClaudeCode}
+	}
+	tests := []struct {
+		name     string
+		activity *transcript.Activity
+		now      int
+		ended    bool
+		category Category
+		today    int64
+		spend    int
+	}{
+		{"no reader: events only, quiet", nil, 30, false, Quiet, 0, 0},
+		{"working recently is active", &transcript.Activity{Last: at(28), Turn: transcript.Working}, 30, false, Active, 0, 0},
+		{"finished turn is waiting", &transcript.Activity{Last: at(5), Turn: transcript.Idle}, 30, false, Waiting, 0, 0},
+		{"working but silent is quiet", &transcript.Activity{Last: at(5), Turn: transcript.Working}, 30, false, Quiet, 0, 0},
+		{"tokens land when used, not at the end",
+			&transcript.Activity{Last: at(20), Turn: transcript.Idle,
+				Spend: []transcript.Spend{{At: at(2), Tokens: 100}, {At: at(20), Tokens: 50}}},
+			30, true, Quiet, 150, 2},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			list := []events.Event{ev(0, events.SessionStarted, "", withTranscript)}
+			if tt.ended {
+				list = append(list, ev(25, events.SessionEnded, "", func(e *events.Event) {
+					withTranscript(e)
+					e.Tokens = &events.Tokens{Input: 999}
+				}))
+			}
+			opt := Options{Now: at(tt.now), Recent: 24 * time.Hour, Quiet: 10 * time.Minute}
+			if tt.activity != nil {
+				opt.Activity = map[string]*transcript.Activity{"/t/s1.jsonl": tt.activity}
+			}
+			snap := Build([]*events.Project{project(nil, list...)}, opt)
+			all := append(snap.Items, snap.Recent...)
+			if len(all) != 1 {
+				t.Fatalf("got %d rows, want 1", len(all))
+			}
+			if all[0].Category != tt.category {
+				t.Errorf("category %d, want %d", all[0].Category, tt.category)
+			}
+			if got := snap.Machine.TokensToday["claude-code"]; tt.ended && got != tt.today {
+				t.Errorf("tokens today %d, want %d (the end total must not count twice)", got, tt.today)
+			}
+			if tt.ended && len(snap.Machine.Spend) != tt.spend {
+				t.Errorf("spend entries %d, want %d", len(snap.Machine.Spend), tt.spend)
+			}
+		})
 	}
 }

@@ -9,6 +9,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/model"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 // column is one board column.
@@ -432,8 +433,12 @@ func (v *view) sessionCells(c cells, item *model.Item) {
 	c["kind"] = one(kind, s.text)
 	c["name"] = one(shortID(sess.ID), s.bold)
 	c["tool"] = one(sess.Tool.Name, s.dim)
-	c["model"] = one(shortModel(sess.Model), s.dim)
-	c["state"] = one(sessionState(sess, now), v.stateStyle(item))
+	modelName := sess.Model
+	if modelName == "" && sess.Activity != nil {
+		modelName = sess.Activity.Model
+	}
+	c["model"] = one(shortModel(modelName), s.dim)
+	c["state"] = one(sessionState(sess, now, v.quiet), v.stateStyle(item))
 	c["units"] = v.spawnedBar(sess)
 	c["subagents"] = v.dots(sess.Subagents, sess.Open())
 	c["job"] = one("—", s.dim)
@@ -444,17 +449,49 @@ func (v *view) sessionCells(c cells, item *model.Item) {
 	}
 	c["elapsed"] = one(span(elapsed), s.text)
 	tokens := "—"
-	if sess.Tokens != nil {
+	switch {
+	case sess.Activity != nil && sess.Activity.Tokens.Total() > 0:
+		tokens = count(sess.Activity.Tokens.Total())
+	case sess.Tokens != nil:
 		tokens = count(sess.Tokens.Total())
 	}
 	c["tokens"] = one(tokens, s.info)
 }
 
-func sessionState(s *model.Session, now time.Time) string {
+// sessionState says what a session is doing. With a transcript reader that is its turn: working
+// (on which tool and file) or waiting for input; without one, only when its last event came.
+func sessionState(s *model.Session, now time.Time, quiet time.Duration) string {
 	if !s.Open() {
 		return "ended " + ago(s.Ended, now)
 	}
-	return "open · last event " + ago(s.Last, now)
+	a := s.Activity
+	if a == nil {
+		return "open · last event " + ago(s.Last, now)
+	}
+	switch {
+	case a.Turn == transcript.Idle:
+		return "waiting for input · " + span(now.Sub(a.TurnSince))
+	case a.Turn == transcript.Working && now.Sub(a.Last) > quiet:
+		return "silent " + span(now.Sub(a.Last)) + doing(a, " · last ")
+	case a.Turn == transcript.Working:
+		if a.Tool == "" {
+			return "working · " + span(now.Sub(a.TurnSince))
+		}
+		return "working" + doing(a, " · ") + " · " + span(now.Sub(a.TurnSince))
+	}
+	return "open · last activity " + ago(a.Last, now)
+}
+
+// doing names the tool a session is running and the file it works on, after a prefix.
+func doing(a *transcript.Activity, prefix string) string {
+	if a.Tool == "" {
+		return ""
+	}
+	text := prefix + a.Tool
+	if a.Target != "" {
+		text += " " + a.Target
+	}
+	return text
 }
 
 // spawnedBar draws the units an interactive session started: running ones, then ended ones.

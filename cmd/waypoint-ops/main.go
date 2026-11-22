@@ -47,6 +47,7 @@ func run() error {
 	width := flag.Int("width", 180, "frame width with -once")
 	height := flag.Int("height", 50, "frame height with -once")
 	focus := flag.String("focus", "", "start focused on this project")
+	selectRow := flag.Int("select", 0, "start with this board row selected, counting from 1")
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), usage)
 		flag.PrintDefaults()
@@ -110,9 +111,13 @@ func run() error {
 		Recent:   cfg.Recent.Duration,
 		Quiet:    cfg.Quiet.Duration,
 		Clock:    clock,
+		Still:    *once,
 	})
 	if *focus != "" {
 		app.Focus(*focus)
+	}
+	if *selectRow > 0 {
+		app.Select(*selectRow - 1)
 	}
 	if *once {
 		fmt.Println(app.Frame(*width, *height))

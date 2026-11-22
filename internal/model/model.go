@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/w-p/waypoint-ops/internal/events"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 // Category orders items on the board: flagged first, then active, waiting, quiet.
@@ -115,6 +116,12 @@ type Session struct {
 	Tool       events.Tool
 	Model      string
 	Transcript string
+
+	// TranscriptFormat is how the transcript is written, as the contract names it.
+	TranscriptFormat string
+
+	// Activity is what a transcript reader found, when one read the transcript.
+	Activity *transcript.Activity
 
 	Started  time.Time
 	Ended    time.Time

@@ -29,10 +29,15 @@ Keys (also on the bar at the bottom): arrows (or `j`/`k`) move, `f` focuses the 
 project, `esc` shows all projects again, `r` shows or hides finished work, `q` quits.
 
 Flags: `-refresh`, `-recent`, `-color`, `-no-color` (or set `NO_COLOR`), `-config`, `-focus`.
-For looking at recorded data: `-at 2026-11-21T14:02:00-05:00` views it as of that time, and
-`-once` prints a single frame (`-width`, `-height`) instead of running the screen.
+For looking at recorded data: `-at 2026-11-21T14:02:00-05:00` views it as of that time, `-once`
+prints a single frame (`-width`, `-height`) instead of running the screen, and `-select 3` starts
+with that board row selected.
+
+Claude Code sessions whose events name a transcript are followed live: the board shows whether
+each is working (and on which tool) or waiting for input, with live token counts and context size.
+Only tool names and file base names are shown, never prompts, replies or commands.
 
 ## Status
 
-Working version, being reshaped by review. Not yet: history files and reading Claude Code
-transcripts for live detail. Below about 175 columns the board drops its least needed columns.
+Working version, being reshaped by review. Not yet: history files, and transcripts of run units
+and subagents. Below about 175 columns the board drops its least needed columns.

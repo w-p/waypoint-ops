@@ -34,7 +34,7 @@ func (v *view) detail(item *model.Item) []string {
 
 // field is one labelled line of the detail pane.
 func (v *view) field(label, text string) string {
-	return " " + v.s.dim.Render(fit(label, 10, false)) + text
+	return " " + v.s.dim.Render(fit(label, 11, false)) + text
 }
 
 func (v *view) runDetail(item *model.Item) []string {
@@ -193,7 +193,7 @@ func (v *view) sessionDetail(item *model.Item) []string {
 	now := v.snap.Now
 	var lines []string
 
-	lines = append(lines, v.field("state", v.stateStyle(item).Render(sessionState(s, now))))
+	lines = append(lines, v.field("state", v.stateStyle(item).Render(sessionState(s, now, v.quiet))))
 	when := "started " + clock(s.Started)
 	if s.Open() {
 		when += " · open for " + span(now.Sub(s.Started))
@@ -201,20 +201,45 @@ func (v *view) sessionDetail(item *model.Item) []string {
 		when += " · ended " + clock(s.Ended) + " · took " + span(s.Ended.Sub(s.Started))
 	}
 	lines = append(lines, v.field("time", when))
-	lines = append(lines, v.field("model", shortModel(s.Model)+"   ("+s.Model+")"))
-	if s.Tokens != nil {
+	modelName := s.Model
+	if a := s.Activity; a != nil && a.Model != "" {
+		modelName = a.Model // the transcript knows if the model changed mid-session
+	}
+	lines = append(lines, v.field("model", shortModel(modelName)+"   ("+modelName+")"))
+	if a := s.Activity; a != nil {
+		replies := fmt.Sprintf("%d replies", a.Replies)
+		if a.Replies == 1 {
+			replies = "1 reply"
+		}
+		lines = append(lines, v.field("activity", fmt.Sprintf("last %s · %s read from the transcript",
+			ago(a.Last, now), replies)))
+		if a.Context > 0 {
+			lines = append(lines, v.field("context", v.s.info.Render(count(a.Context))+v.s.dim.Render(" tokens in the latest reply's context")))
+		}
+		t := a.Tokens
+		lines = append(lines, v.field("tokens", fmt.Sprintf("%s so far · input %s · cache write %s · cache read %s · output %s",
+			v.s.info.Render(count(t.Total())), count(t.Input), count(t.CacheWrite), count(t.CacheRead), count(t.Output))))
+	} else if s.Tokens != nil {
 		t := s.Tokens
 		lines = append(lines, v.field("tokens", fmt.Sprintf("%s in all · input %s · cache write %s · cache read %s · output %s",
 			count(t.Total()), count(t.Input), count(t.CacheWrite), count(t.CacheRead), count(t.Output))))
 	} else {
-		lines = append(lines, v.field("tokens", v.s.dim.Render("reported when the session ends")))
+		reason := "reported when the session ends"
+		if s.Transcript == "" {
+			reason += " (no transcript named)"
+		}
+		lines = append(lines, v.field("tokens", v.s.dim.Render(reason)))
 	}
 	memory := plural(s.Memory, "write")
 	if s.MemoryFile != "" {
 		memory += " · last " + s.MemoryFile
 	}
 	lines = append(lines, v.field("memory", memory))
-	lines = append(lines, v.field("compacted", plural(s.Compactions, "time")))
+	compactions := s.Compactions
+	if a := s.Activity; a != nil && a.Compactions > compactions {
+		compactions = a.Compactions // hooks may have missed some; the transcript records each one
+	}
+	lines = append(lines, v.field("compacted", plural(compactions, "time")))
 	if len(s.Subagents) > 0 {
 		lines = append(lines, v.field("subagents", fmt.Sprintf("%d (%d live)", len(s.Subagents), s.Live())))
 	}

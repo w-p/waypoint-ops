@@ -17,7 +17,9 @@
 - *(nothing shipped yet)*. First slice built and reworked after the first review: panels with run
   gauges and an hourly token graph, the board with unit bars and a full-row selection, focus,
   detail panel, bottom key bar, spring animation, column dropping, color switch, settings file
-  (`plan/first-slice.md`). Awaiting the second review.
+  (`plan/first-slice.md`). Committed 2026-11-22 (`1b16d3e`).
+- Claude Code transcript reader, built and awaiting review: working or waiting for input with the
+  tool in use, live tokens over time, context size (`design/transcript-reader.md`).
 
 **Approach**
 
@@ -65,6 +67,7 @@
 - Event contract (Waypoint's, drafted in the pilot repo): `.waypoint/design/session-events.md` at
   the pilot project
 - Overview mockup: `.waypoint/design/mockups/overview.py`
+- Transcript reader: `.waypoint/design/transcript-reader.md`
 - Pending contract proposals (approved, not yet in the contract): `.waypoint/design/contract-proposals.md`
 
 **Plan**
