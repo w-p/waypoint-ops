@@ -39,7 +39,8 @@ type Options struct {
 	Running          claude.List
 	LocalTranscripts []string
 
-	// OtherWork shows sessions in Running that no event names (`design/other-work.md`).
+	// OtherWork shows sessions in Running that no event names and that run outside every
+	// watched project (`design/other-work.md`). Those inside a watched project always show.
 	OtherWork bool
 }
 
@@ -94,9 +95,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 	for _, b := range builders {
 		b.place(&snap, opt)
 	}
-	if opt.OtherWork {
-		others(&snap, builders, claimed, opt)
-	}
+	listed(&snap, builders, claimed, opt)
 	sort.SliceStable(snap.Items, func(i, j int) bool {
 		a, b := snap.Items[i], snap.Items[j]
 		if ra, rb := rank(a), rank(b); ra != rb {
@@ -182,9 +181,10 @@ func within(folder, root string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// others adds the listed sessions no event names, as dimmed other work: in the watched project
-// whose folder holds them, or else under their folder's name.
-func others(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Options) {
+// listed adds the running sessions no event names. One inside a watched project's folder belongs
+// to that project and shows like any session; one outside them all is other work, shown under its
+// folder's name when OtherWork is set.
+func listed(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Options) {
 	if !opt.Running.OK {
 		return
 	}
@@ -198,12 +198,15 @@ func others(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Op
 			continue
 		}
 		p := opt.Running.Sessions[id]
-		project := filepath.Base(p.Cwd)
+		project, other := filepath.Base(p.Cwd), true
 		for _, b := range builders {
 			if within(p.Cwd, b.root) {
-				project = b.project
+				project, other = b.project, false
 				break
 			}
+		}
+		if other && !opt.OtherWork {
+			continue
 		}
 		s := &Session{
 			Project: project,
@@ -211,7 +214,8 @@ func others(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Op
 			Kind:    events.Interactive,
 			Tool:    events.Tool{Name: "claude-code"},
 			Process: &p,
-			Other:   true,
+			Listed:  true,
+			Other:   other,
 			Folder:  p.Cwd,
 			Started: p.Started(),
 			Last:    p.Since,
@@ -240,7 +244,11 @@ func others(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Op
 		} else {
 			item.Category = sessionCategory(s, opt)
 		}
-		snap.Machine.OtherOpen++
+		if other {
+			snap.Machine.OtherOpen++
+		} else {
+			snap.Machine.SessionsOpen++
+		}
 		snap.Items = append(snap.Items, item)
 	}
 }

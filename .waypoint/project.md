@@ -23,9 +23,13 @@
   (`4f34aa3`).
 - Claude Code's running-session list (`claude agents --json`), built and awaiting review: sessions
   waiting on a permission prompt highlighted in amber, busy or idle, gone when no longer running.
-- Other work, built and awaiting review: running Claude Code sessions no event names, dimmed below
-  the Waypoint work, `o` or `other_work` to hide them; a unit session the runner's events do not
-  name joins its running unit (`design/other-work.md`).
+- Other work, built and awaiting review: running Claude Code sessions no event names show under the
+  watched project they run in; those outside every watched project are dimmed below the rest, `o`
+  or `other_work` to hide them; a unit session the runner's events do not name joins its running
+  unit (`design/other-work.md`). Committed with the running-session list (`7516ada`).
+- In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
+  the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
+  appear once the pilot's runner writes events (`contract-proposals.md` §4).
 
 **Approach**
 

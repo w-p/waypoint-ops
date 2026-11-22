@@ -211,8 +211,11 @@ func (v *view) sessionDetail(item *model.Item) []string {
 			text += " · " + p.Name
 		}
 		lines = append(lines, v.field("process", text+v.s.dim.Render(" (from claude agents)")))
-		if s.Other {
+		switch {
+		case s.Other:
 			lines = append(lines, v.field("waypoint", v.s.dim.Render("no events: other work, running in "+s.Folder)))
+		case s.Listed:
+			lines = append(lines, v.field("waypoint", v.s.dim.Render("no events yet: known from claude agents, running in "+s.Folder)))
 		}
 	case s.Gone:
 		lines = append(lines, v.field("process", v.s.dim.Render("not running (claude agents does not list it)")))
@@ -250,7 +253,7 @@ func (v *view) sessionDetail(item *model.Item) []string {
 	if s.MemoryFile != "" {
 		memory += " · last " + s.MemoryFile
 	}
-	if !s.Other {
+	if !s.Listed {
 		lines = append(lines, v.field("memory", memory))
 	}
 	compactions := s.Compactions

@@ -450,8 +450,16 @@ func TestOtherWork(t *testing.T) {
 	opt := Options{Now: at(10), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
 		Alive: func(pid int) bool { return pid == 42 }, Running: running}
 
-	if snap := Build([]*events.Project{p}, opt); snap.Machine.OtherOpen != 0 || len(snap.Items) != 2 {
-		t.Fatalf("hidden: other %d, items %d; want 0 and 2", snap.Machine.OtherOpen, len(snap.Items))
+	// With other work hidden, the session in the watched project's folder still shows, as a
+	// session of that project.
+	hidden := Build([]*events.Project{p}, opt)
+	if hidden.Machine.OtherOpen != 0 || len(hidden.Items) != 3 {
+		t.Fatalf("hidden: other %d, items %d; want 0 and 3", hidden.Machine.OtherOpen, len(hidden.Items))
+	}
+	for _, item := range hidden.Items {
+		if s := item.Session; s != nil && s.ID == "mine" && (s.Other || !s.Listed || item.Project != "demo") {
+			t.Errorf("session in the watched folder: other %v listed %v project %q", s.Other, s.Listed, item.Project)
+		}
 	}
 
 	opt.OtherWork = true
@@ -464,7 +472,7 @@ func TestOtherWork(t *testing.T) {
 	}
 	// The blocked session sorts with flagged work; the rest follow the Waypoint rows, active
 	// before waiting. The unit's session is claimed by its running unit.
-	want := []string{"tool/ask", "side-project/away", "demo/mine"}
+	want := []string{"tool/ask", "side-project/away"}
 	if strings.Join(got, " ") != strings.Join(want, " ") {
 		t.Errorf("other work %v, want %v", got, want)
 	}
@@ -472,10 +480,10 @@ func TestOtherWork(t *testing.T) {
 		t.Errorf("blocked other work is not first and flagged for attention")
 	}
 	last := snap.Items[len(snap.Items)-1]
-	if last.Session == nil || last.Session.ID != "mine" {
+	if last.Session == nil || last.Session.ID != "away" {
 		t.Errorf("other work does not follow Waypoint work")
 	}
-	if snap.Machine.OtherOpen != 3 || snap.Machine.SessionsOpen != 1 {
-		t.Errorf("other %d sessions %d; want 3 and 1", snap.Machine.OtherOpen, snap.Machine.SessionsOpen)
+	if snap.Machine.OtherOpen != 2 || snap.Machine.SessionsOpen != 2 {
+		t.Errorf("other %d sessions %d; want 2 and 2", snap.Machine.OtherOpen, snap.Machine.SessionsOpen)
 	}
 }

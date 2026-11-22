@@ -39,9 +39,9 @@ each is working (and on which tool) or waiting for input, with live token counts
 Only tool names and file base names are shown, never prompts, replies or commands.
 Every 5 seconds the app also asks Claude Code which sessions are running (`claude agents --json`):
 a session waiting on a permission prompt or a dialog is highlighted in amber, and one that is no
-longer running is shown as gone. Running Claude Code sessions that no event names (projects
-without Waypoint, scratch folders) are shown as other work: dimmed, below the Waypoint work, under
-the watched project they run in or else their folder's name. This is skipped when viewing the past
+longer running is shown as gone. Running Claude Code sessions that no event names show under the
+watched project they run in; those outside every watched project (projects without Waypoint,
+scratch folders) are other work: dimmed, below the rest, under their folder's name. This is skipped when viewing the past
 with `-at`.
 
 ## Status

@@ -129,8 +129,11 @@ type Session struct {
 	Process *claude.Session
 	Gone    bool
 
-	// Other marks other work: a session no event names, known only from a tool's own list of
-	// its running sessions (a project without Waypoint, say). Its Folder is where it runs.
+	// Listed marks a session no event names, known only from a tool's own list of its running
+	// sessions; Folder is where it runs. Inside a watched project it shows like any session (its
+	// project may not write events yet). Other marks one outside every watched project: other
+	// work, shown dimmed.
+	Listed bool
 	Other  bool
 	Folder string
 

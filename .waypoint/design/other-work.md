@@ -8,21 +8,28 @@ filter", with more tools (Cursor) on the way.
 
 Claude Code's running list (`design/transcript-reader.md`) reports every Claude Code session on
 this machine, not just the ones in watched projects with Waypoint's hooks. A session in that list
-that no event names is other work: a project without Waypoint, a scratch folder, a watched project
-whose hooks are not installed. The overview shows it so the picture covers everything the machine
-is doing, without mistaking it for Waypoint work.
+that no event names is shown either way:
+
+- **Inside a watched project's folder:** a session of that project, drawn like any other, with
+  "no events yet" in its detail panel. Changed the same day after the developer started using the
+  app on real projects: no project writes events yet, so dimming these would have dimmed
+  everything.
+- **Outside every watched project:** other work (a project without Waypoint, a scratch folder).
+  The overview shows it so the picture covers everything the machine is doing, without mistaking
+  it for Waypoint work.
 
 ## How it shows
 
 - **Dimmed rows**, below the Waypoint work in the board, kind `other`. The project column is the
-  watched project the folder lies in, or else the folder's name.
+  folder's name.
 - **State as for any session:** working on a tool, waiting for input, from Claude Code's status and
   the session's transcript (found by its id in this machine's Claude Code folder).
 - **A blocked session stays amber.** A permission prompt is Claude Code's report, not a judgement
   of the app, and it is the one thing about other work worth seeing at a glance.
 - **Tokens count.** Their spend goes into today's total and the graph, since it is the same
   subscription.
-- **Filter:** `o` hides or shows other work everywhere (board, counts, tokens). The settings file's
+- **Filter:** `o` hides or shows other work everywhere (board, counts, tokens). Sessions in watched
+  projects are never hidden. The settings file's
   `other_work = false` starts with it hidden. Shown by default.
 - **Only while running.** With no events, nothing is left when the process exits, so other work
   leaves the board then. Not under `-at`, since the list describes only the present.
