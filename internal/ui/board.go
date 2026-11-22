@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
+	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/model"
 	"github.com/w-p/waypoint-ops/internal/transcript"
@@ -144,7 +145,10 @@ func (v *view) row(item *model.Item, cols []column, width int, selected, finishe
 		return v.s.selectd.Render(fit(" "+strings.Join(plain, " "), width, false))
 	}
 	var bg lipgloss.Color
-	if item.Flag != "" {
+	switch {
+	case item.Attention:
+		bg = v.s.attnTint
+	case item.Flag != "":
 		bg = v.s.flagTint
 	}
 	gap := tinted(lipgloss.NewStyle(), bg).Render(" ")
@@ -176,6 +180,15 @@ func (v *view) cells(item *model.Item, finished bool) cells {
 	} else {
 		v.sessionCells(c, item)
 	}
+	if other(item) {
+		// Other work is dimmed throughout, so Waypoint work stands out.
+		for _, parts := range c {
+			for i := range parts {
+				parts[i].style = s.dim
+			}
+		}
+		return c
+	}
 	if finished && item.Flag == "" {
 		for key, parts := range c {
 			if key == "state" || key == "mark" || key == "units" {
@@ -189,13 +202,21 @@ func (v *view) cells(item *model.Item, finished bool) cells {
 	return c
 }
 
+// other reports whether an item is other work shown dimmed: a session no event names, unless it
+// waits on a person.
+func other(item *model.Item) bool {
+	return item.Session != nil && item.Session.Other && !item.Attention
+}
+
 // mark is the first cell: a pulsing "!" for flagged work, a spinner for work in progress, bars
 // for waiting, a dot for quiet sessions and a tick for finished work.
 func (v *view) mark(item *model.Item, finished bool) []part {
 	s := v.s
 	switch {
 	case item.Flag != "":
-		return one("!", s.pulse(v.phase))
+		return one("!", s.pulse(v.phase, item.Attention))
+	case item.Session != nil && item.Session.Gone:
+		return one("–", s.dim)
 	case finished:
 		if item.Run != nil && item.Run.Outcome == "DONE" || item.Session != nil {
 			return one("✓", s.good)
@@ -277,6 +298,12 @@ func (v *view) runState(item *model.Item) string {
 }
 
 func (v *view) stateStyle(item *model.Item) lipgloss.Style {
+	if item.Attention {
+		return v.s.attn
+	}
+	if item.Session != nil && item.Session.Gone {
+		return v.s.dim
+	}
 	if item.Flag != "" {
 		return v.s.flag
 	}
@@ -427,7 +454,10 @@ func (v *view) sessionCells(c cells, item *model.Item) {
 	sess := item.Session
 	now := v.snap.Now
 	kind := "session"
-	if sess.Kind != events.Interactive {
+	switch {
+	case sess.Other:
+		kind = "other"
+	case sess.Kind != events.Interactive:
 		kind = sess.Kind
 	}
 	c["kind"] = one(kind, s.text)
@@ -465,6 +495,35 @@ func sessionState(s *model.Session, now time.Time, quiet time.Duration) string {
 		return "ended " + ago(s.Ended, now)
 	}
 	a := s.Activity
+	if s.Gone {
+		return "gone, no end recorded · last activity " + ago(s.Last, now)
+	}
+	if p := s.Process; p != nil {
+		switch p.Status {
+		case claude.Waiting:
+			what := p.WaitingFor
+			if what == "" {
+				what = "the person"
+			}
+			return "waiting on " + what + " · " + span(now.Sub(p.Since))
+		case claude.Busy:
+			since := p.Since
+			if a != nil && a.Turn == transcript.Working && a.TurnSince.Before(since) {
+				since = a.TurnSince
+			}
+			text := "working"
+			if a != nil && a.Turn == transcript.Working {
+				text += doing(a, " · ")
+			}
+			return text + " · " + span(now.Sub(since))
+		case claude.Idle:
+			since := p.Since
+			if a != nil && a.Turn == transcript.Idle && a.TurnSince.Before(since) {
+				since = a.TurnSince
+			}
+			return "waiting for input · " + span(now.Sub(since))
+		}
+	}
 	if a == nil {
 		return "open · last event " + ago(s.Last, now)
 	}

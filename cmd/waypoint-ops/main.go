@@ -112,6 +112,9 @@ func run() error {
 		Quiet:    cfg.Quiet.Duration,
 		Clock:    clock,
 		Still:    *once,
+		Live:     *at == "",
+
+		OtherWork: cfg.OtherWork,
 	})
 	if *focus != "" {
 		app.Focus(*focus)

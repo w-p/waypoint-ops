@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"time"
 
+	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
@@ -123,6 +124,16 @@ type Session struct {
 	// Activity is what a transcript reader found, when one read the transcript.
 	Activity *transcript.Activity
 
+	// Process is the session's entry in Claude Code's list of running sessions. Gone means the
+	// list was read and the session was not in it, though no end was recorded.
+	Process *claude.Session
+	Gone    bool
+
+	// Other marks other work: a session no event names, known only from a tool's own list of
+	// its running sessions (a project without Waypoint, say). Its Folder is where it runs.
+	Other  bool
+	Folder string
+
 	Started  time.Time
 	Ended    time.Time
 	Last     time.Time
@@ -155,6 +166,10 @@ type Item struct {
 	// Flag says why the item is highlighted; empty when it is not.
 	Flag string
 
+	// Attention marks a flag that is a question for the person (a permission prompt, say)
+	// rather than a problem.
+	Attention bool
+
 	// Last is the item's most recent activity.
 	Last time.Time
 }
@@ -170,6 +185,7 @@ func (i *Item) Key() string {
 // Machine is what all projects share: one machine and one subscription.
 type Machine struct {
 	SessionsOpen   int
+	OtherOpen      int
 	SubagentsLive  int
 	JobsRunning    int
 	RunsUnfinished int

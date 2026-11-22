@@ -35,6 +35,8 @@ type styles struct {
 	keyLabel    lipgloss.Style
 	empty       lipgloss.Style
 	flagTint    lipgloss.Color
+	attnTint    lipgloss.Color
+	attn        lipgloss.Style
 	gradient    []rgb
 	newStyleFor func() lipgloss.Style
 }
@@ -62,6 +64,7 @@ const (
 	cSelect = "#7dcfff"
 	cInk    = "#1a1b26"
 	cTint   = "#3a2130"
+	cAttn   = "#3a3220"
 )
 
 // newStyles builds the styles for a color mode. With color off every style is empty and renders
@@ -73,7 +76,7 @@ func newStyles(mode string) styles {
 		plain := r.NewStyle
 		return styles{
 			text: plain(), dim: plain(), bold: plain(), flag: plain(), bad: plain(), wait: plain(),
-			good: plain(), info: plain(), sub: plain(), project: plain(), border: plain(),
+			good: plain(), info: plain(), sub: plain(), project: plain(), border: plain(), attn: plain(),
 			boxTitle: plain(), headBar: plain(), empty: plain(),
 			selectd:     plain().Reverse(true),
 			keyKey:      plain(),
@@ -108,6 +111,8 @@ func newStyles(mode string) styles {
 		keyLabel:    style().Foreground(lipgloss.Color(cInk)).Background(lipgloss.Color(cSelect)),
 		empty:       fg(cBorder),
 		flagTint:    lipgloss.Color(cTint),
+		attnTint:    lipgloss.Color(cAttn),
+		attn:        fg(cWait).Bold(true),
 		gradient:    []rgb{hex(cProj), hex(cTitle), hex(cSub)},
 		newStyleFor: style,
 	}
@@ -116,6 +121,7 @@ func newStyles(mode string) styles {
 		// a background.
 		s.headBar = style().Bold(true).Underline(true)
 		s.flagTint = ""
+		s.attnTint = ""
 	}
 	return s
 }
@@ -169,11 +175,18 @@ func (s styles) along(t float64) lipgloss.Style {
 }
 
 // pulse is the flag color breathing between full and half brightness; phase is in seconds.
-func (s styles) pulse(phase float64) lipgloss.Style {
+// Attention flags breathe in amber, problems in red.
+func (s styles) pulse(phase float64, attention bool) lipgloss.Style {
 	if !s.rich {
+		if attention {
+			return s.attn
+		}
 		return s.flag
 	}
 	t := 0.5 + 0.5*math.Cos(phase*2*math.Pi/1.6)
 	c := blend(hex("#6b2a3a"), hex(cBad), t)
+	if attention {
+		c = blend(hex("#6b5328"), hex(cWait), t)
+	}
 	return s.newStyleFor().Foreground(lipgloss.Color(c.String())).Bold(true)
 }

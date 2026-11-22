@@ -19,7 +19,13 @@
   detail panel, bottom key bar, spring animation, column dropping, color switch, settings file
   (`plan/first-slice.md`). Committed 2026-11-22 (`1b16d3e`).
 - Claude Code transcript reader, built and awaiting review: working or waiting for input with the
-  tool in use, live tokens over time, context size (`design/transcript-reader.md`).
+  tool in use, live tokens over time, context size (`design/transcript-reader.md`). Committed
+  (`4f34aa3`).
+- Claude Code's running-session list (`claude agents --json`), built and awaiting review: sessions
+  waiting on a permission prompt highlighted in amber, busy or idle, gone when no longer running.
+- Other work, built and awaiting review: running Claude Code sessions no event names, dimmed below
+  the Waypoint work, `o` or `other_work` to hide them; a unit session the runner's events do not
+  name joins its running unit (`design/other-work.md`).
 
 **Approach**
 
@@ -68,6 +74,7 @@
   the pilot project
 - Overview mockup: `.waypoint/design/mockups/overview.py`
 - Transcript reader: `.waypoint/design/transcript-reader.md`
+- Other work: `.waypoint/design/other-work.md`
 - Pending contract proposals (approved, not yet in the contract): `.waypoint/design/contract-proposals.md`
 
 **Plan**

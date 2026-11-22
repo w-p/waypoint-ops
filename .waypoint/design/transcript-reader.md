@@ -62,3 +62,32 @@ a live session showed "working · Bash" with its spinner, live tokens and contex
 
 Small additions: a `-select N` flag for reviewing a row's detail panel; the detail panel's
 compaction count takes the higher of the hooks' and the transcript's.
+
+## Claude Code's own list of running sessions (2026-11-22)
+
+Asked whether Claude Code could be asked directly about prompts, the developer agreed to a second
+source next to the transcript: `claude agents --json`, the command Claude Code documents for
+listing its sessions. It reports each running session's pid, session id and status: busy, idle,
+or waiting with what it waits for (a permission prompt, input, a sandbox request, a dialog).
+
+- **Asked every 5 seconds**, in the background, only while the clock is real (not under `-at`).
+  Each ask takes about 0.3 s. Without the `claude` command the app stops asking; a failed ask
+  says nothing, so no session is called gone because of it.
+- **Joined by session id.** Claude Code's status decides first: waiting on something is
+  highlighted for attention, busy is active, idle is waiting for input. The transcript still
+  supplies the tool, file, tokens and context.
+- **Attention, not a problem.** A session waiting on a permission prompt or a dialog is flagged
+  in amber (a pulsing amber `!` and an amber tint) and sorts to the top with the problems, which
+  stay red. The state reads "waiting on permission prompt · 3m".
+- **Gone.** An interactive Claude Code session with no end recorded that the list does not
+  include is gone, as long as its transcript lives in this machine's Claude Code folder (a
+  session from elsewhere would be missing for other reasons). It moves to finished work, marked
+  `–`, reading "gone, no end recorded".
+- **Kept in view.** A session that is still running stays on the board however long it has been
+  idle.
+
+Checked live: of the test data's three "open" sessions, two were running (busy at the time) and
+one, in the pilot, was gone. A blocked session was checked in a rendered frame, because none was
+blocked at the time.
+
+For review: the status panel's "flagged" count includes attention items, in red.

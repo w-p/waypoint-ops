@@ -201,6 +201,22 @@ func (v *view) sessionDetail(item *model.Item) []string {
 		when += " · ended " + clock(s.Ended) + " · took " + span(s.Ended.Sub(s.Started))
 	}
 	lines = append(lines, v.field("time", when))
+	switch p := s.Process; {
+	case p != nil:
+		text := fmt.Sprintf("pid %d · %s", p.PID, p.Status)
+		if p.WaitingFor != "" {
+			text += " on " + p.WaitingFor
+		}
+		if p.Name != "" {
+			text += " · " + p.Name
+		}
+		lines = append(lines, v.field("process", text+v.s.dim.Render(" (from claude agents)")))
+		if s.Other {
+			lines = append(lines, v.field("waypoint", v.s.dim.Render("no events: other work, running in "+s.Folder)))
+		}
+	case s.Gone:
+		lines = append(lines, v.field("process", v.s.dim.Render("not running (claude agents does not list it)")))
+	}
 	modelName := s.Model
 	if a := s.Activity; a != nil && a.Model != "" {
 		modelName = a.Model // the transcript knows if the model changed mid-session
@@ -234,7 +250,9 @@ func (v *view) sessionDetail(item *model.Item) []string {
 	if s.MemoryFile != "" {
 		memory += " · last " + s.MemoryFile
 	}
-	lines = append(lines, v.field("memory", memory))
+	if !s.Other {
+		lines = append(lines, v.field("memory", memory))
+	}
 	compactions := s.Compactions
 	if a := s.Activity; a != nil && a.Compactions > compactions {
 		compactions = a.Compactions // hooks may have missed some; the transcript records each one

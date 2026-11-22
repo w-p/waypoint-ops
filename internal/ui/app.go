@@ -3,11 +3,16 @@
 package ui
 
 import (
+	"context"
+	"errors"
 	"math"
+	"os"
+	"path/filepath"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/harmonica"
+	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/model"
 	"github.com/w-p/waypoint-ops/internal/transcript"
@@ -25,6 +30,13 @@ type Options struct {
 	// stood then.
 	Clock func() time.Time
 
+	// Live asks Claude Code which of its sessions are running. It is off when the clock has
+	// been moved into the past, because the list only describes the present.
+	Live bool
+
+	// OtherWork shows Claude Code sessions that no event names, dimmed (`design/other-work.md`).
+	OtherWork bool
+
 	// Still turns animation off: gauges and graphs are drawn at their values straight away, and
 	// transcripts are read before the first frame instead of in the background.
 	Still bool
@@ -39,6 +51,7 @@ type App struct {
 	height int
 	focus  string
 	recent bool
+	other  bool
 	cursor int
 
 	// selected is the key of the selected item, so the selection survives a refresh.
@@ -58,7 +71,25 @@ type App struct {
 	readers  map[string]*transcript.Reader
 	activity map[string]*transcript.Activity
 	reading  bool
+
+	// Claude Code's list of running sessions, the last reading of it, and where this machine's
+	// Claude Code keeps its transcripts.
+	running claude.List
+	asking  bool
+	local   []string
 }
+
+// runningMsg carries a reading of Claude Code's running sessions.
+type runningMsg struct {
+	list claude.List
+	err  error
+}
+
+type runningTick struct{}
+
+// runningEvery is how often Claude Code is asked for its running sessions. Each ask starts a
+// process, so it is slower than the refresh.
+const runningEvery = 5 * time.Second
 
 // activityMsg carries what a background batch of transcript reads found.
 type activityMsg map[string]*transcript.Activity
@@ -82,6 +113,7 @@ func New(opt Options) *App {
 		width:  180,
 		height: 50,
 		recent: true,
+		other:  opt.OtherWork,
 
 		spring:  harmonica.NewSpring(harmonica.FPS(fps), 5.0, 0.6),
 		springs: map[string]*motion{},
@@ -89,8 +121,14 @@ func New(opt Options) *App {
 
 		readers:  map[string]*transcript.Reader{},
 		activity: map[string]*transcript.Activity{},
+		local:    localTranscripts(),
 	}
 	a.scan()
+	if opt.Still && opt.Live {
+		if ask := a.askRunning(); ask != nil {
+			a.takeRunning(ask().(runningMsg))
+		}
+	}
 	a.build()
 	if opt.Still {
 		if read := a.readTranscripts(); read != nil {
@@ -125,6 +163,10 @@ func (a *App) build() {
 		Recent:   a.opt.Recent,
 		Quiet:    a.opt.Quiet,
 		Activity: a.activity,
+
+		Running:          a.running,
+		LocalTranscripts: a.local,
+		OtherWork:        a.other,
 	})
 	for i, p := range a.snap.Projects {
 		if msg, ok := a.errs[p.Name]; ok {
@@ -178,6 +220,56 @@ func (a *App) readTranscripts() tea.Cmd {
 	}
 }
 
+// localTranscripts are the path prefixes of this machine's Claude Code folder, as events may
+// write them: absolute, or under "~/".
+func localTranscripts() []string {
+	home, _ := os.UserHomeDir()
+	dir := claude.Dir()
+	if dir == "" {
+		return nil
+	}
+	out := []string{dir + string(filepath.Separator)}
+	if home != "" && dir == filepath.Join(home, ".claude") {
+		out = append(out, "~/.claude/")
+	}
+	return out
+}
+
+// askRunning returns a command that asks Claude Code for its running sessions, or nil when
+// asking is off or an ask is already out.
+func (a *App) askRunning() tea.Cmd {
+	if !a.opt.Live || a.asking {
+		return nil
+	}
+	a.asking = true
+	now := a.opt.Clock()
+	return func() tea.Msg {
+		list, err := claude.Read(context.Background(), now)
+		return runningMsg{list, err}
+	}
+}
+
+// takeRunning keeps a reading. A failed reading says nothing about which sessions run, so no
+// session is called gone on its account; without the claude command, asking stops.
+func (a *App) takeRunning(msg runningMsg) {
+	a.asking = false
+	if msg.err != nil {
+		a.running = claude.List{}
+		if errors.Is(msg.err, claude.ErrMissing) {
+			a.opt.Live = false
+		}
+		return
+	}
+	a.running = claude.Locate(claude.Track(a.running, msg.list), claude.Dir())
+}
+
+func (a *App) nextRunning() tea.Cmd {
+	if !a.opt.Live {
+		return nil
+	}
+	return tea.Tick(runningEvery, func(time.Time) tea.Msg { return runningTick{} })
+}
+
 // apply takes in a finished batch of transcript reads and rebuilds the snapshot with it.
 func (a *App) apply(found activityMsg) {
 	a.reading = false
@@ -223,7 +315,7 @@ func (a *App) next() tea.Cmd {
 // Init starts the refresh timer and the animation.
 func (a *App) Init() tea.Cmd {
 	a.frames = true
-	return tea.Batch(a.next(), a.frame(), a.readTranscripts())
+	return tea.Batch(a.next(), a.frame(), a.readTranscripts(), a.askRunning())
 }
 
 // frame schedules the next animation frame: fast while a spring is moving, slower when only the
@@ -277,6 +369,12 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a, tea.Batch(a.next(), a.load())
 	case activityMsg:
 		a.apply(msg)
+	case runningTick:
+		return a, a.askRunning()
+	case runningMsg:
+		a.takeRunning(msg)
+		a.build()
+		return a, a.nextRunning()
 	case frame:
 		a.step()
 		return a, a.frame()
@@ -314,6 +412,9 @@ func (a *App) key(k string) tea.Cmd {
 	case "r":
 		a.recent = !a.recent
 		a.restore()
+	case "o":
+		a.other = !a.other
+		a.build()
 	}
 	a.remember()
 	return nil
@@ -333,6 +434,7 @@ func (a *App) Frame(width, height int) string {
 		height:  height,
 		focus:   a.focus,
 		recent:  a.recent,
+		other:   a.other,
 		cursor:  a.cursor,
 		refresh: a.opt.Refresh.String(),
 		window:  a.opt.Recent,

@@ -1,9 +1,11 @@
 package model
 
 import (
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
@@ -343,5 +345,137 @@ func TestSessionActivity(t *testing.T) {
 				t.Errorf("spend entries %d, want %d", len(snap.Machine.Spend), tt.spend)
 			}
 		})
+	}
+}
+
+func TestRunningSessions(t *testing.T) {
+	interactive := func(path string) func(*events.Event) {
+		return func(e *events.Event) {
+			e.Session = &events.Session{ID: "s1", Kind: events.Interactive}
+			e.Transcript = &events.Transcript{Path: path, Format: transcript.FormatClaudeCode}
+		}
+	}
+	local := "~/.claude/projects/demo/s1.jsonl"
+	tests := []struct {
+		name      string
+		path      string
+		running   claude.List
+		now       int
+		category  Category
+		attention bool
+		flag      string
+		recent    bool
+	}{
+		{"blocked on a permission prompt is flagged for attention", local,
+			claude.List{OK: true, Sessions: map[string]claude.Session{"s1": {SessionID: "s1", Status: claude.Waiting, WaitingFor: "permission prompt"}}},
+			5, Flagged, true, "waiting on permission prompt", false},
+		{"busy is active even when events are old", local,
+			claude.List{OK: true, Sessions: map[string]claude.Session{"s1": {SessionID: "s1", Status: claude.Busy}}},
+			60, Active, false, "", false},
+		{"idle is waiting", local,
+			claude.List{OK: true, Sessions: map[string]claude.Session{"s1": {SessionID: "s1", Status: claude.Idle}}},
+			5, Waiting, false, "", false},
+		{"not running and local is gone, with finished work", local,
+			claude.List{OK: true, Sessions: map[string]claude.Session{}},
+			5, Quiet, false, "", true},
+		{"not running but from elsewhere stays open", "/other/machine/s1.jsonl",
+			claude.List{OK: true, Sessions: map[string]claude.Session{}},
+			5, Active, false, "", false},
+		{"no listing read says nothing", local, claude.List{}, 5, Active, false, "", false},
+		{"running keeps an old session in view", local,
+			claude.List{OK: true, Sessions: map[string]claude.Session{"s1": {SessionID: "s1", Status: claude.Idle}}},
+			60 * 30, Waiting, false, "", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			p := project(nil, ev(0, events.SessionStarted, "", interactive(tt.path)))
+			snap := Build([]*events.Project{p}, Options{
+				Now: at(tt.now), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
+				Running: tt.running, LocalTranscripts: []string{"~/.claude/"},
+			})
+			rows := snap.Items
+			if tt.recent {
+				rows = snap.Recent
+			}
+			if len(rows) != 1 {
+				t.Fatalf("items %d recent %d", len(snap.Items), len(snap.Recent))
+			}
+			item := rows[0]
+			if item.Category != tt.category || item.Attention != tt.attention || item.Flag != tt.flag {
+				t.Errorf("category %d attention %v flag %q; want %d %v %q", item.Category, item.Attention, item.Flag, tt.category, tt.attention, tt.flag)
+			}
+			wantOpen := 1
+			if tt.recent {
+				wantOpen = 0
+			}
+			if snap.Machine.SessionsOpen != wantOpen {
+				t.Errorf("sessions open %d, want %d", snap.Machine.SessionsOpen, wantOpen)
+			}
+		})
+	}
+}
+
+func TestUnitSessionWithoutIDJoinsRunningUnit(t *testing.T) {
+	p := project(map[string]int{"r": 42},
+		ev(0, events.RunStarted, "r", started("1", "2")),
+		ev(1, events.UnitStarted, "r", unit("1", "")),
+		ev(2, events.SessionStarted, "", hook("u1", events.Unit, "r")),
+	)
+	snap := build(p, 10)
+	if len(snap.Items) != 1 {
+		t.Fatalf("got %d items, want only the run (the unit session is not a row of its own)", len(snap.Items))
+	}
+	u := snap.Items[0].Run.Units[0]
+	if u.Session == nil || u.SessionID != "u1" {
+		t.Errorf("unit 1 session %q, want u1", u.SessionID)
+	}
+}
+
+func TestOtherWork(t *testing.T) {
+	listed := func(id, cwd, status string, startedAt time.Time) claude.Session {
+		return claude.Session{SessionID: id, Cwd: cwd, Status: status, StartedAt: startedAt.UnixMilli(), Since: startedAt}
+	}
+	p := project(map[string]int{"r": 42},
+		ev(0, events.SessionStarted, "", hook("s1", events.Interactive, "")),
+		ev(1, events.RunStarted, "r", started("1")),
+		ev(2, events.UnitStarted, "r", unit("1", "")),
+	)
+	running := claude.List{OK: true, Sessions: map[string]claude.Session{
+		"s1":   listed("s1", "/nowhere/demo", claude.Busy, at(0)),
+		"unit": listed("unit", "/nowhere/demo/scratch", claude.Busy, at(2)),
+		"mine": listed("mine", "/nowhere/demo", claude.Idle, at(3)),
+		"away": listed("away", "/elsewhere/side-project", claude.Busy, at(4)),
+		"ask":  {SessionID: "ask", Cwd: "/elsewhere/tool", Status: claude.Waiting, WaitingFor: "permission prompt", Since: at(5)},
+	}}
+	opt := Options{Now: at(10), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
+		Alive: func(pid int) bool { return pid == 42 }, Running: running}
+
+	if snap := Build([]*events.Project{p}, opt); snap.Machine.OtherOpen != 0 || len(snap.Items) != 2 {
+		t.Fatalf("hidden: other %d, items %d; want 0 and 2", snap.Machine.OtherOpen, len(snap.Items))
+	}
+
+	opt.OtherWork = true
+	snap := Build([]*events.Project{p}, opt)
+	var got []string
+	for _, item := range snap.Items {
+		if item.Session != nil && item.Session.Other {
+			got = append(got, item.Project+"/"+item.Session.ID)
+		}
+	}
+	// The blocked session sorts with flagged work; the rest follow the Waypoint rows, active
+	// before waiting. The unit's session is claimed by its running unit.
+	want := []string{"tool/ask", "side-project/away", "demo/mine"}
+	if strings.Join(got, " ") != strings.Join(want, " ") {
+		t.Errorf("other work %v, want %v", got, want)
+	}
+	if snap.Items[0].Session == nil || !snap.Items[0].Attention {
+		t.Errorf("blocked other work is not first and flagged for attention")
+	}
+	last := snap.Items[len(snap.Items)-1]
+	if last.Session == nil || last.Session.ID != "mine" {
+		t.Errorf("other work does not follow Waypoint work")
+	}
+	if snap.Machine.OtherOpen != 3 || snap.Machine.SessionsOpen != 1 {
+		t.Errorf("other %d sessions %d; want 3 and 1", snap.Machine.OtherOpen, snap.Machine.SessionsOpen)
 	}
 }

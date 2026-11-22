@@ -35,6 +35,9 @@ type Config struct {
 	// Quiet is how long an open session may go without an event before it is shown as quiet.
 	Quiet Duration `toml:"quiet"`
 
+	// OtherWork shows Claude Code sessions that no event names, dimmed. The o key toggles it.
+	OtherWork bool `toml:"other_work"`
+
 	// RetentionDays is how long history is kept. History is not written yet.
 	RetentionDays int `toml:"retention_days"`
 }
@@ -62,6 +65,7 @@ func Default() Config {
 		Color:         "auto",
 		Recent:        Duration{48 * time.Hour},
 		Quiet:         Duration{15 * time.Minute},
+		OtherWork:     true,
 		RetentionDays: 90,
 	}
 }

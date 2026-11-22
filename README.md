@@ -19,6 +19,7 @@ refresh = "2s"      # how often to reread the projects
 color = "auto"      # auto, always or never
 recent = "48h"      # how long finished work stays on screen
 quiet = "15m"       # an open session with no event for this long is shown as quiet
+other_work = true   # show Claude Code sessions that have no Waypoint events, dimmed
 
 [[projects]]
 path = "/path/to/project"
@@ -26,7 +27,7 @@ name = "project"    # optional; defaults to the folder name
 ```
 
 Keys (also on the bar at the bottom): arrows (or `j`/`k`) move, `f` focuses the selected row's
-project, `esc` shows all projects again, `r` shows or hides finished work, `q` quits.
+project, `esc` shows all projects again, `r` shows or hides finished work, `o` shows or hides other work, `q` quits.
 
 Flags: `-refresh`, `-recent`, `-color`, `-no-color` (or set `NO_COLOR`), `-config`, `-focus`.
 For looking at recorded data: `-at 2026-11-21T14:02:00-05:00` views it as of that time, `-once`
@@ -36,6 +37,12 @@ with that board row selected.
 Claude Code sessions whose events name a transcript are followed live: the board shows whether
 each is working (and on which tool) or waiting for input, with live token counts and context size.
 Only tool names and file base names are shown, never prompts, replies or commands.
+Every 5 seconds the app also asks Claude Code which sessions are running (`claude agents --json`):
+a session waiting on a permission prompt or a dialog is highlighted in amber, and one that is no
+longer running is shown as gone. Running Claude Code sessions that no event names (projects
+without Waypoint, scratch folders) are shown as other work: dimmed, below the Waypoint work, under
+the watched project they run in or else their folder's name. This is skipped when viewing the past
+with `-at`.
 
 ## Status
 

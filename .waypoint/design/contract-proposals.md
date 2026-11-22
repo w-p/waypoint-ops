@@ -5,7 +5,8 @@ contract is Waypoint's, drafted in the pilot repository (`.waypoint/design/sessi
 the pilot project); this file holds waypoint-ops' requests until that document takes them.
 
 **Timing:** apply to the pilot document after its 2026-11-22 chain finishes. A modified tracked
-file in the pilot stops a waiting chain.
+file in the pilot stops a waiting chain. Sent to the interactive pilot session on 2026-11-22, with
+§4 and the runner findings, to apply when the chain is done.
 
 Each item below names the contract's open item it answers, the proposed text, and why the reader
 needs it.
@@ -33,6 +34,31 @@ Why: the overview highlights sessions waiting on their person, shows active and 
 and stops showing closed ones as open. For Claude Code, the Stop hook gives `input`, the
 Notification hook gives `permission`, and the prompt and tool hooks give `session.active`.
 
+Claude Code's writers, checked against its hook documentation on 2026-11-22:
+
+- `permission`: the `PermissionRequest` hook fires just before the dialog shows (and when a call
+  would be denied because no prompt is possible). A hook that returns no decision only observes,
+  so it can write the event without changing the prompt. `Notification` with type
+  `permission_prompt` also fires, but only after about 6 seconds, and so is the fallback.
+- `input`: the `Stop` hook fires when the agent finishes responding. `Notification` with type
+  `idle_prompt` fires about 60 seconds later if nobody has typed.
+- Nothing fires when the person answers a prompt. The next `PreToolUse`, `PostToolUse` or
+  `UserPromptSubmit` shows the session moved on, so readers should treat any later event from the
+  session (including `session.active`) as ending the wait.
+
+Where this matters most, after Claude Code's own list (2026-11-22). For an interactive Claude
+Code session on this machine, the app already gets these answers by asking Claude Code directly
+(`claude agents --json`: busy, idle, or waiting with what it waits for, and a pid;
+`design/transcript-reader.md`), and that list knows about permission prompts sooner and more surely
+than any hook. For those sessions `session.waiting` and `session.active` are a fallback. They are
+still wanted for:
+
+- other tools (Cursor, Codex), which have no such list that the app can ask;
+- sessions on another machine, whose event files arrive with the repository;
+- the record: the list says only what is happening now, so past waits (how long a run sat on a
+  prompt overnight) exist only as events;
+- readers that do not ask Claude Code at all.
+
 The `pid` field goes slightly beyond the heartbeat the developer approved. A heartbeat alone
 cannot tell a session waiting overnight from a closed window, because neither writes anything. A
 pid can. To check when the hook is written: whether the hook's parent process is the tool itself
@@ -57,7 +83,33 @@ guards against it without a contract change.
 No change to the contract text, which already says absolute. The fixtures generated on 2026-11-21
 write `~/...`; the generator is fixed to write absolute paths. Readers expand a leading `~` anyway.
 
+## 4. A unit's session id at start (contract Open, last item)
+
+The contract leaves it open whether a unit's session id can be known when the unit starts. It can,
+for Claude Code: `claude --session-id <uuid>` (checked in 2.1.323) runs a session under an id the
+caller chooses. A headless `claude -p` session also appears in Claude Code's running list from its
+first seconds, with its session id, pid and folder (checked 2026-11-22; it reports
+`kind: "interactive"`, so the list alone cannot tell it from a person's session).
+
+Proposed change to `unit.started`: "`session` carries the id when the tool lets the runner choose
+it (Claude Code: `--session-id`). Optional `transcript`, when the runner knows where the tool will
+write it." And remove the open item.
+
+Why: with the id at start, the reader joins the unit to its live transcript and to Claude Code's
+running list while the unit works, rather than learning who it was when it ends. It also keeps a
+running unit from looking like unrelated work: the app now shows Claude Code sessions that have no
+events as other work (`design/other-work.md`), and a unit it cannot place would show twice. Today
+the hook's own `session.started` (kind `unit`, parent the run) gives the id at start when hooks are
+installed; the runner's event makes it independent of hooks.
+
+A second case, reported by the pilot session on 2026-11-22: the pilot's own
+`.claude/runner/chain_status.sh` picks a unit's transcript by folder and recency, and during
+merge-prereq it reported an interactive session's commands (a merge and push) as unit 2's. A
+runner-chosen session id fixes both readers. waypoint-ops' own fallback (a running unit with no id
+claims the earliest listed session in its project's folder started with it) has the same weakness,
+narrowed by the start time; it stays only until the runner writes the id.
+
 ## Not proposed now
 
-Freeze start and end events for machine jobs, a unit's session id at start, and other tools'
-hooks: revisit when the code that would write them is built (`conops.md` §8).
+Freeze start and end events for machine jobs, and other tools' hooks: revisit when the code that
+would write them is built (`conops.md` §8).

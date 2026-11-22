@@ -20,6 +20,7 @@ type view struct {
 	height  int
 	focus   string
 	recent  bool
+	other   bool
 	cursor  int
 	refresh string
 
@@ -145,7 +146,9 @@ func (v *view) header(items, done []*model.Item) []string {
 func (v *view) compactHeader(items []*model.Item) string {
 	n := map[model.Category]int{}
 	for _, item := range items {
-		n[item.Category]++
+		if !other(item) {
+			n[item.Category]++
+		}
 	}
 	scope := "all projects"
 	if v.focus != "" {
@@ -170,7 +173,9 @@ func (v *view) statusPanel(items []*model.Item, width int) []string {
 	s := v.s
 	n := map[model.Category]int{}
 	for _, item := range items {
-		n[item.Category]++
+		if !other(item) {
+			n[item.Category]++
+		}
 	}
 	m := v.snap.Machine
 	num := func(value int, style lipgloss.Style) string {
@@ -196,7 +201,11 @@ func (v *view) statusPanel(items []*model.Item, width int) []string {
 		body = append(body, pad(left[i], 17)+right[i])
 	}
 	projects := plural(len(v.snap.Projects), "project")
-	body = append(body, s.dim.Render(fmt.Sprintf(" %s · %d finished in %s", projects, v.hiddenRecent(), window(v.window))))
+	foot := fmt.Sprintf(" %s · %d finished in %s", projects, v.hiddenRecent(), window(v.window))
+	if m.OtherOpen > 0 {
+		foot += fmt.Sprintf(" · %d other", m.OtherOpen)
+	}
+	body = append(body, s.dim.Render(foot))
 	scope := "all projects"
 	if v.focus != "" {
 		scope = "focus " + v.focus
@@ -445,6 +454,11 @@ func (v *view) keys() string {
 		recent = "Show done"
 	}
 	list = append(list, key{"r", recent})
+	if v.other {
+		list = append(list, key{"o", "Hide other"})
+	} else {
+		list = append(list, key{"o", "Show other"})
+	}
 	var b strings.Builder
 	for _, k := range list {
 		b.WriteString(v.s.keyKey.Render(" " + k.key + " "))

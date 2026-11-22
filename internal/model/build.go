@@ -3,10 +3,13 @@ package model
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sort"
+	"strings"
 	"syscall"
 	"time"
 
+	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
@@ -28,6 +31,26 @@ type Options struct {
 
 	// Activity is what transcript readers found, by transcript path as the events give it.
 	Activity map[string]*transcript.Activity
+
+	// Running is Claude Code's own list of its running sessions on this machine. When it was
+	// read, a Claude Code session missing from it has no process, provided its transcript lives
+	// in one of LocalTranscripts (path prefixes for this machine's Claude Code folder); a session
+	// from another machine or user would be missing for other reasons.
+	Running          claude.List
+	LocalTranscripts []string
+
+	// OtherWork shows sessions in Running that no event names (`design/other-work.md`).
+	OtherWork bool
+}
+
+// local reports whether a transcript path is in this machine's Claude Code folder.
+func (o Options) local(path string) bool {
+	for _, prefix := range o.LocalTranscripts {
+		if prefix != "" && strings.HasPrefix(path, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // ProcessAlive reports whether pid names a running process. A process owned by another user
@@ -49,6 +72,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 		Now:     opt.Now,
 		Machine: Machine{TokensToday: map[string]int64{}},
 	}
+	var builders []*builder
 	for _, p := range projects {
 		snap.Projects = append(snap.Projects, ProjectInfo{
 			Name:     p.Name,
@@ -56,6 +80,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 			Problems: p.Problems(),
 		})
 		b := newBuilder(p.Name)
+		b.root = p.Root
 		for _, e := range p.Events() {
 			if e.TS.After(opt.Now) {
 				continue
@@ -63,12 +88,19 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 			b.add(e)
 		}
 		b.finish(p.PIDs, opt)
+		builders = append(builders, b)
+	}
+	claimed := claim(builders, opt.Running)
+	for _, b := range builders {
 		b.place(&snap, opt)
+	}
+	if opt.OtherWork {
+		others(&snap, builders, claimed, opt)
 	}
 	sort.SliceStable(snap.Items, func(i, j int) bool {
 		a, b := snap.Items[i], snap.Items[j]
-		if a.Category != b.Category {
-			return a.Category < b.Category
+		if ra, rb := rank(a), rank(b); ra != rb {
+			return ra < rb
 		}
 		return a.Last.After(b.Last)
 	})
@@ -81,9 +113,161 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 	return snap
 }
 
+// rank orders the board: flagged work first, then Waypoint work by category, then other work by
+// category. Other work waiting on a person is flagged and so sorts with the rest.
+func rank(item *Item) int {
+	r := int(item.Category)
+	if item.Session != nil && item.Session.Other && item.Category != Flagged {
+		r += int(Quiet) + 1
+	}
+	return r
+}
+
+// claim lists the session ids that events account for. A running unit whose events carry no
+// session id takes the earliest listed session in its project's folder that started with it, so a
+// unit is never mistaken for other work.
+func claim(builders []*builder, running claude.List) map[string]bool {
+	claimed := map[string]bool{}
+	for _, b := range builders {
+		for id := range b.sessions {
+			claimed[id] = true
+		}
+		for _, r := range b.runs {
+			for _, u := range r.Units {
+				if u.SessionID != "" {
+					claimed[u.SessionID] = true
+				}
+			}
+		}
+	}
+	if !running.OK {
+		return claimed
+	}
+	ids := make([]string, 0, len(running.Sessions))
+	for id := range running.Sessions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, b := range builders {
+		for _, name := range b.order {
+			r := b.runs[name]
+			u := r.Running()
+			if u == nil || u.SessionID != "" || r.State != Running {
+				continue
+			}
+			best := ""
+			for _, id := range ids {
+				p := running.Sessions[id]
+				if claimed[id] || !within(p.Cwd, b.root) || p.Started().Before(u.Started.Add(-time.Minute)) {
+					continue
+				}
+				if best == "" || p.Started().Before(running.Sessions[best].Started()) {
+					best = id
+				}
+			}
+			if best != "" {
+				claimed[best] = true
+			}
+		}
+	}
+	return claimed
+}
+
+// within reports whether folder is root or inside it.
+func within(folder, root string) bool {
+	if folder == "" || root == "" {
+		return false
+	}
+	rel, err := filepath.Rel(root, folder)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+// others adds the listed sessions no event names, as dimmed other work: in the watched project
+// whose folder holds them, or else under their folder's name.
+func others(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Options) {
+	if !opt.Running.OK {
+		return
+	}
+	ids := make([]string, 0, len(opt.Running.Sessions))
+	for id := range opt.Running.Sessions {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		if claimed[id] {
+			continue
+		}
+		p := opt.Running.Sessions[id]
+		project := filepath.Base(p.Cwd)
+		for _, b := range builders {
+			if within(p.Cwd, b.root) {
+				project = b.project
+				break
+			}
+		}
+		s := &Session{
+			Project: project,
+			ID:      id,
+			Kind:    events.Interactive,
+			Tool:    events.Tool{Name: "claude-code"},
+			Process: &p,
+			Other:   true,
+			Folder:  p.Cwd,
+			Started: p.Started(),
+			Last:    p.Since,
+		}
+		if s.Started.IsZero() {
+			s.Started = p.Since
+		}
+		if p.Transcript != "" {
+			s.Transcript = p.Transcript
+			s.TranscriptFormat = transcript.FormatClaudeCode
+		}
+		if a := opt.Activity[s.Transcript]; a != nil && s.Transcript != "" {
+			s.Activity = a
+			if a.Last.After(s.Last) {
+				s.Last = a.Last
+			}
+			for _, sp := range a.Spend {
+				snap.spend(sp.At, s.Tool.Name, sp.Tokens, opt.Now)
+			}
+		}
+		item := &Item{Project: project, Session: s, Last: s.Last}
+		if p.Blocked() {
+			item.Category = Flagged
+			item.Attention = true
+			item.Flag = waitingFlag(p)
+		} else {
+			item.Category = sessionCategory(s, opt)
+		}
+		snap.Machine.OtherOpen++
+		snap.Items = append(snap.Items, item)
+	}
+}
+
+// spend counts tokens used at a time towards today's total and the last 24 hours.
+func (snap *Snapshot) spend(at time.Time, tool string, n int64, now time.Time) {
+	y1, m1, d1 := at.In(now.Location()).Date()
+	y2, m2, d2 := now.Date()
+	if y1 == y2 && m1 == m2 && d1 == d2 {
+		snap.Machine.TokensToday[tool] += n
+	}
+	if at.After(now.Add(-24*time.Hour)) && !at.After(now) {
+		snap.Machine.Spend = append(snap.Machine.Spend, Spend{at, tool, n})
+	}
+}
+
+func waitingFlag(p claude.Session) string {
+	if p.WaitingFor == "" {
+		return "waiting on the person"
+	}
+	return "waiting on " + p.WaitingFor
+}
+
 // builder gathers one project's events into runs and sessions.
 type builder struct {
 	project  string
+	root     string
 	runs     map[string]*Run
 	order    []string
 	sessions map[string]*Session
@@ -279,6 +463,15 @@ func (b *builder) finish(pids map[string]int, opt Options) {
 						s.joined = true
 					}
 				}
+				if !s.joined {
+					// The runner's events did not name this session: it belongs to the unit
+					// that was running when it started and has no session of its own yet.
+					if u := unitAt(r, s.Started); u != nil {
+						u.SessionID = s.ID
+						u.Session = s
+					}
+					s.joined = true // never shown as a session of its own
+				}
 			} else if parent, ok := b.sessions[s.Parent]; ok {
 				parent.Units = append(parent.Units, s)
 				s.joined = true
@@ -366,12 +559,32 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 		if s.joined {
 			continue
 		}
-		if s.Last.Before(cutoff) {
-			continue
+		if s.Open() && s.Tool.Name == "claude-code" && opt.Running.OK {
+			if p, ok := opt.Running.Sessions[s.ID]; ok {
+				s.Process = &p
+			} else if s.Kind == events.Interactive && opt.local(s.Transcript) {
+				s.Gone = true
+			}
+		}
+		if s.Last.Before(cutoff) && s.Process == nil {
+			continue // a running process keeps a session in view however long it has been idle
 		}
 		item := &Item{Project: b.project, Session: s, Last: s.Last}
+		if s.Gone {
+			// No end was recorded, but no process is left: it is finished work.
+			item.Category = Quiet
+			snap.Recent = append(snap.Recent, item)
+			continue
+		}
+		if p := s.Process; p != nil && p.Blocked() {
+			item.Category = Flagged
+			item.Attention = true
+			item.Flag = waitingFlag(*p)
+		}
 		if s.Open() {
-			item.Category = sessionCategory(s, opt)
+			if !item.Attention {
+				item.Category = sessionCategory(s, opt)
+			}
 			if s.Kind == events.Interactive {
 				snap.Machine.SessionsOpen++
 			}
@@ -383,9 +596,18 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 	}
 }
 
-// sessionCategory places an open session: with a transcript reader, working is active and a
-// finished turn is waiting; without one, any event within the quiet threshold is active.
+// sessionCategory places an open session. Claude Code's own status decides first (busy is
+// active, idle is waiting); then a transcript reader's turn (working is active, a finished turn
+// is waiting); without either, any event within the quiet threshold is active.
 func sessionCategory(s *Session, opt Options) Category {
+	if p := s.Process; p != nil {
+		switch p.Status {
+		case claude.Busy:
+			return Active
+		case claude.Idle:
+			return Waiting
+		}
+	}
 	silent := opt.Now.Sub(s.Last) > opt.Quiet
 	if a := s.Activity; a != nil {
 		switch {
@@ -400,6 +622,17 @@ func sessionCategory(s *Session, opt Options) Category {
 		return Quiet
 	}
 	return Active
+}
+
+// unitAt finds the run's last unit started at or before t that has no session yet.
+func unitAt(r *Run, t time.Time) *Unit {
+	var found *Unit
+	for _, u := range r.Units {
+		if u.SessionID == "" && u.Session == nil && !u.Started.IsZero() && !u.Started.After(t.Add(time.Minute)) {
+			found = u
+		}
+	}
+	return found
 }
 
 func runItem(r *Run) *Item {
