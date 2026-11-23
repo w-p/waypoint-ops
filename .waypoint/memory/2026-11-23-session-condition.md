@@ -68,6 +68,17 @@ Session condition, machine load, Windows builds and a responsive screen layout b
   v0.3.0: six archives with checksums; the Linux and Windows builds were downloaded, checked against
   `checksums.txt` and report v0.3.0.
 
+## The pilot's mock run
+
+- The developer watched the pilot's `condition-demo` run: the detail showed unit 1 running while the
+  runs panel and board read "0/2 running" (the count was units finished). Now "0/2 done", and the
+  runs gauge draws the unit under way in a lighter shade after the finished ones. The run's model
+  showed "—" until a unit finished; it now falls back to the running unit's transcript. Runs panel
+  minimum widened to 60 for the longer label (one row of panels from 164 columns). Not yet committed.
+- The developer saw a gap between the two shares at some widths: the solid share ended on a
+  part-filled cell (eighths), leaving a blank sliver. With a share under way, the solid share now
+  ends on a whole cell; a test checks every width from 4 to 60.
+
 ## Next
 
 - The pilot runs a mock workload to try it out.

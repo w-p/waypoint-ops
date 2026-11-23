@@ -325,11 +325,16 @@ func (r *Run) Models() []string {
 	var out []string
 	seen := map[string]bool{}
 	for _, u := range r.Units {
-		if u.Model == "" || seen[u.Model] {
+		name := u.Model
+		if name == "" && u.Activity != nil {
+			// A unit still running has no finish record yet; its transcript names the model.
+			name = u.Activity.Model
+		}
+		if name == "" || seen[name] {
 			continue
 		}
-		seen[u.Model] = true
-		out = append(out, u.Model)
+		seen[name] = true
+		out = append(out, name)
 	}
 	return out
 }

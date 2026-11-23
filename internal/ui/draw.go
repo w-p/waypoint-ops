@@ -72,11 +72,23 @@ var eighths = []string{"", "▏", "▎", "▍", "▌", "▋", "▊", "▉"}
 
 // gauge draws a bar width cells long, filled to frac, in eighths of a cell.
 func (v *view) gauge(frac float64, width int, fill lipgloss.Style) string {
+	return v.gauge2(frac, 0, width, fill)
+}
+
+// gauge2 draws a gauge with a second, lighter share after the first: work under way after work
+// done. Any share under way shows at least one cell while there is room.
+func (v *view) gauge2(frac, next float64, width int, fill lipgloss.Style) string {
 	if width <= 0 {
 		return ""
 	}
 	frac = math.Max(0, math.Min(1, frac))
+	next = math.Max(0, math.Min(1-frac, next))
 	steps := int(math.Round(frac * float64(width*8)))
+	if next > 0 {
+		// A part-filled cell would leave a blank sliver before the lighter share, so the first
+		// share ends on a whole cell.
+		steps = int(math.Round(frac*float64(width))) * 8
+	}
 	full, part := steps/8, steps%8
 	var b strings.Builder
 	b.WriteString(fill.Render(strings.Repeat("█", full) + eighths[part]))
@@ -84,7 +96,13 @@ func (v *view) gauge(frac float64, width int, fill lipgloss.Style) string {
 	if part > 0 {
 		used++
 	}
-	b.WriteString(v.s.empty.Render(strings.Repeat("·", width-used)))
+	shaded := int(math.Round((frac+next)*float64(width))) - used
+	if next > 0 {
+		shaded = max(1, shaded)
+	}
+	shaded = max(0, min(width-used, shaded))
+	b.WriteString(fill.Render(strings.Repeat("▒", shaded)))
+	b.WriteString(v.s.empty.Render(strings.Repeat("·", width-used-shaded)))
 	return b.String()
 }
 

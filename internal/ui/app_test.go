@@ -128,7 +128,7 @@ func TestPanelRows(t *testing.T) {
 		want  string
 	}{
 		{250, "[[status machine runs tokens]]"},
-		{160, "[[status machine runs tokens]]"},
+		{170, "[[status machine runs tokens]]"},
 		{150, "[[status machine] [runs tokens]]"},
 		{100, "[[status machine] [runs tokens]]"},
 		{80, "[[status machine] [runs] [tokens]]"},

@@ -169,7 +169,7 @@ func (v *view) header(rows [][]column, items, done []*model.Item) []string {
 var topPanels = []column{
 	{key: "status", width: 44, min: 44},
 	{key: "machine", width: 34, min: 32, grow: 1},
-	{key: "runs", width: 64, min: 56, grow: 3},
+	{key: "runs", width: 68, min: 60, grow: 3},
 	{key: "tokens", width: 52, min: 28},
 }
 
@@ -430,22 +430,26 @@ func (v *view) runsPanel(items, done []*model.Item, width int) []string {
 	if v.focus == "" {
 		projectWidth = 11
 	}
-	gaugeWidth := inner - 1 - projectWidth - nameWidth - 1 - 1 - 6 - 1 - 9
+	gaugeWidth := inner - 1 - projectWidth - nameWidth - 1 - 1 - 10 - 1 - 9
 	var body []string
 	for i, item := range runs {
 		if i == headerHeight-2 {
 			break
 		}
 		r := item.Run
-		finished := 0
+		finished, running := 0, 0
 		for _, u := range r.Units {
-			if u.Status == "DONE" {
+			switch u.Status {
+			case "DONE":
 				finished++
+			case model.Working:
+				running++
 			}
 		}
-		frac := 0.0
+		frac, next := 0.0, 0.0
 		if len(r.Units) > 0 {
 			frac = float64(finished) / float64(len(r.Units))
+			next = float64(running) / float64(len(r.Units))
 		}
 		style, word := v.runWord(item)
 		line := " "
@@ -453,8 +457,9 @@ func (v *view) runsPanel(items, done []*model.Item, width int) []string {
 			line += s.project.Render(fit(r.Project, projectWidth-1, false)) + " "
 		}
 		line += s.bold.Render(fit(r.Short(), nameWidth, false)) + " "
-		line += v.gauge(v.anim("gauge/"+item.Key(), frac), max(4, gaugeWidth), style) + " "
-		line += s.dim.Render(fit(fmt.Sprintf("%d/%d", finished, len(r.Units)), 6, true)) + " "
+		// Finished units fill the gauge; the one under way follows in a lighter shade.
+		line += v.gauge2(v.anim("gauge/"+item.Key(), frac), next, max(4, gaugeWidth), style) + " "
+		line += s.dim.Render(fit(fmt.Sprintf("%d/%d done", finished, len(r.Units)), 10, true)) + " "
 		line += style.Render(fit(word, 9, false))
 		body = append(body, line)
 	}

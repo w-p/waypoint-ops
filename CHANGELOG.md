@@ -2,6 +2,13 @@
 
 What changed between releases, newest first.
 
+## Unreleased
+
+- A run's unit counts say what they count ("0/2 done"), and the runs gauge shows the unit under
+  way in a lighter shade after the finished ones, so a run on its first unit no longer looks
+  empty.
+- A run shows its model while its first unit is still running, from that unit's transcript.
+
 ## 0.3.0 (2026-11-23)
 
 - **Session condition.** A CONDITION column shows how tired each session is (fresh, working,

@@ -505,7 +505,7 @@ func (v *view) unitBar(r *model.Run) []part {
 			done++
 		}
 	}
-	parts = append(parts, part{fmt.Sprintf(" %d/%d", done, len(r.Units)), v.s.dim})
+	parts = append(parts, part{fmt.Sprintf(" %d/%d done", done, len(r.Units)), v.s.dim})
 	return parts
 }
 
