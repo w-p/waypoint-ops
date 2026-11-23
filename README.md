@@ -68,7 +68,7 @@ takes a few milliseconds.
 
 Add a section for the new version to `CHANGELOG.md`, commit, then tag and push the tag:
 
-    git tag v0.2.0 && git push origin v0.2.0
+    git tag v0.3.0 && git push origin v0.3.0
 
 The release workflow tests, builds the six archives (zip for Windows) with their checksums, and
 publishes a GitHub release whose notes are that changelog section. Every push and pull request to

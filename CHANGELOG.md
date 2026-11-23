@@ -2,7 +2,7 @@
 
 What changed between releases, newest first.
 
-## Unreleased
+## 0.3.0 (2026-11-23)
 
 - **Session condition.** A CONDITION column shows how tired each session is (fresh, working,
   tiring, tired, exhausted) and flags one that just compacted, has unsaved work while a compaction
