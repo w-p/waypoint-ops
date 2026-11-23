@@ -17,22 +17,22 @@
 - *(nothing shipped yet)*. First slice built and reworked after the first review: panels with run
   gauges and an hourly token graph, the board with unit bars and a full-row selection, focus,
   detail panel, bottom key bar, spring animation, column dropping, color switch, settings file
-  (`plan/first-slice.md`). Committed 2026-11-22 (`1b16d3e`).
+  (`plan/first-slice.md`). Committed 2026-11-22 (`93c6023`).
 - Claude Code transcript reader, built and awaiting review: working or waiting for input with the
   tool in use, live tokens over time, context size (`design/transcript-reader.md`). Committed
-  (`4f34aa3`).
+  (`27081bc`).
 - Claude Code's running-session list (`claude agents --json`), built and awaiting review: sessions
   waiting on a permission prompt highlighted in amber, busy or idle, gone when no longer running.
 - Other work, built and awaiting review: running Claude Code sessions no event names show under the
   watched project they run in; those outside every watched project are dimmed below the rest, `o`
   or `other_work` to hide them; a unit session the runner's events do not name joins its running
-  unit (`design/other-work.md`). Committed with the running-session list (`7516ada`).
+  unit (`design/other-work.md`). Committed with the running-session list (`082bca2`).
 - Subagents read from their own transcripts (running, handed back), so sessions without events
   show their subagents (`design/transcript-reader.md`).
 - Releases and CI, set up but not yet pushed: CI on every push and pull request; a `vX.Y.Z` tag
   builds Linux and macOS archives and publishes a GitHub release from `CHANGELOG.md`
-  (`design/releases.md`). The GitHub repository is public and empty; what to publish is the
-  developer's call (memory 2026-11-22).
+  (`design/releases.md`). The GitHub repository is public; history was scrubbed of private
+  project names before the first push (memory 2026-11-22).
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
