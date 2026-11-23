@@ -152,6 +152,9 @@ type Session struct {
 
 	// joined is set for a unit session matched to a run's unit.
 	joined bool
+
+	// readSubagents is set when Subagents came from the transcript rather than from events.
+	readSubagents bool
 }
 
 // Open reports whether no end has been seen for the session.
@@ -331,7 +334,7 @@ func (r *Run) UnitCounts() []Count {
 
 // Live counts the session's subagents with no end seen, while the session itself is open.
 func (s *Session) Live() int {
-	if !s.Open() {
+	if !s.Open() || s.Gone {
 		return 0
 	}
 	live := 0

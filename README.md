@@ -46,5 +46,5 @@ with `-at`.
 
 ## Status
 
-Working version, being reshaped by review. Not yet: history files, and transcripts of run units
-and subagents. Below about 175 columns the board drops its least needed columns.
+Working version, being reshaped by review. Not yet: history files and transcripts of run units.
+Subagents are read from their transcripts beside the session's. Below about 175 columns the board drops its least needed columns.

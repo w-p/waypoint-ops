@@ -27,3 +27,13 @@ review, is next. Nothing is committed.
 screen; reworked as panels with gauges, an hourly token graph, unit bars, a bottom key bar and
 spring animation (`design/first-slice.md`, "after the first review"). Narrow terminals now drop
 columns. Tests pass. Waiting on the second review. Nothing is committed.
+
+**Done (2026-11-22).** The developer approved the redesign ("much, much better"), and the slice
+grew past its plan in review: the Claude Code transcript reader, Claude Code's own list of running
+sessions, other work, and subagents from their transcripts (`design/transcript-reader.md`,
+`design/other-work.md`). All committed. Step 6 is replaced by daily use: the app watches the
+developer's 11 Waypoint projects from the settings file, and changes now come from what that use
+shows. Next inputs, both outside this repo: Cursor, checked on the developer's work machine
+(2026-11-23), and real run events once the pilot's runner writes them after merge-prereq
+(`design/contract-proposals.md` §4). History files, unit transcripts and the flagged-count
+question wait for real runs.

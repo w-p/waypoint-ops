@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -65,6 +66,20 @@ type Activity struct {
 
 	// Spend is token use per minute, oldest first.
 	Spend []Spend
+
+	// Subagents are the session's subagents, from their own transcripts beside the session's,
+	// oldest first.
+	Subagents []Subagent
+}
+
+// Subagent is one subagent as its transcript shows it.
+type Subagent struct {
+	ID      string
+	Started time.Time
+	Last    time.Time
+
+	// Done is set once the subagent handed back its result or ended its turn.
+	Done bool
 }
 
 // Reader follows one transcript file, reading only what was added since the last read.
@@ -73,6 +88,10 @@ type Reader struct {
 	act  Activity
 
 	offset int64
+
+	// subs follows each subagent transcript by file, rereading it only when its size changes.
+	subs map[string]*subFile
+
 	// seen holds the usage already counted for each reply, because Claude Code repeats a reply's
 	// usage on every line it writes for that reply.
 	seen map[string]events.Tokens
@@ -85,19 +104,26 @@ func NewReader(path string) *Reader {
 			path = filepath.Join(home, rest)
 		}
 	}
-	return &Reader{Path: path, seen: map[string]events.Tokens{}}
+	return &Reader{Path: path, seen: map[string]events.Tokens{}, subs: map[string]*subFile{}}
 }
 
 // Activity returns what has been read so far, as a copy the reader will not change.
 func (r *Reader) Activity() Activity {
 	a := r.act
 	a.Spend = append([]Spend(nil), r.act.Spend...)
+	a.Subagents = append([]Subagent(nil), r.act.Subagents...)
 	return a
 }
 
 // Read reads lines added since the last read, up to the first line written after until; that line
 // and those after it wait for a later read. A file that shrank is read again from the start.
 func (r *Reader) Read(until time.Time) error {
+	err := r.read(until)
+	r.readSubagents(until)
+	return err
+}
+
+func (r *Reader) read(until time.Time) error {
 	fh, err := os.Open(r.Path)
 	if err != nil {
 		return err
@@ -328,4 +354,111 @@ func content(raw json.RawMessage) ([]block, string) {
 	var blocks []block
 	_ = json.Unmarshal(raw, &blocks)
 	return blocks, ""
+}
+
+// subFile is what is known of one subagent transcript.
+type subFile struct {
+	size int64
+	sub  Subagent
+}
+
+// readSubagents follows the subagent transcripts Claude Code writes beside the session's own, in
+// a folder named after it: <session>/subagents/agent-<id>.jsonl. Only a file's first and last
+// lines are read, and only when its size changed. Subagents started after until are left out.
+func (r *Reader) readSubagents(until time.Time) {
+	dir := filepath.Join(strings.TrimSuffix(r.Path, ".jsonl"), "subagents")
+	files, _ := filepath.Glob(filepath.Join(dir, "agent-*.jsonl"))
+	var out []Subagent
+	for _, path := range files {
+		info, err := os.Stat(path)
+		if err != nil {
+			continue
+		}
+		f := r.subs[path]
+		if f == nil || f.size != info.Size() {
+			sub, ok := readSubagent(path, info.Size())
+			if !ok {
+				continue
+			}
+			f = &subFile{size: info.Size(), sub: sub}
+			r.subs[path] = f
+		}
+		if f.sub.Started.IsZero() || f.sub.Started.After(until) {
+			continue
+		}
+		out = append(out, f.sub)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Started.Before(out[j].Started) })
+	r.act.Subagents = out
+}
+
+// tailSize is how much of a subagent transcript's end is read to find its last line.
+const tailSize = 256 << 10
+
+// readSubagent reads a subagent transcript's id, first timestamp, and how it ends.
+func readSubagent(path string, size int64) (Subagent, bool) {
+	fh, err := os.Open(path)
+	if err != nil {
+		return Subagent{}, false
+	}
+	defer fh.Close()
+	sub := Subagent{ID: strings.TrimSuffix(strings.TrimPrefix(filepath.Base(path), "agent-"), ".jsonl")}
+	head, err := bufio.NewReaderSize(fh, 64<<10).ReadBytes('\n')
+	if err != nil && len(head) == 0 {
+		return Subagent{}, false
+	}
+	sub.Started = stamp(head)
+
+	start := max(0, size-tailSize)
+	tail := make([]byte, size-start)
+	if _, err := fh.ReadAt(tail, start); err != nil && err != io.EOF {
+		return Subagent{}, false
+	}
+	lines := bytes.Split(tail, []byte("\n"))
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := lines[i]
+		if i == 0 && start > 0 {
+			break // cut off by the tail's start
+		}
+		if at := stamp(line); !at.IsZero() && at.After(sub.Last) {
+			sub.Last = at
+		}
+		if done, known := ended(line); known {
+			sub.Done = done
+			break
+		}
+	}
+	if sub.Last.IsZero() {
+		sub.Last = sub.Started
+	}
+	return sub, true
+}
+
+// ended reads one subagent transcript line: known is false for lines that say nothing about the
+// turn (request records, attachments); done is true for the hand-back (a tool result that ends
+// the turn) or a reply that ends the turn.
+func ended(line []byte) (done, known bool) {
+	if !bytes.Contains(line, []byte(`"type":"assistant"`)) && !bytes.Contains(line, []byte(`"type":"user"`)) {
+		return false, false
+	}
+	var e struct {
+		Type         string `json:"type"`
+		ToolEndsTurn bool   `json:"toolEndsTurn"`
+		Message      *struct {
+			StopReason string `json:"stop_reason"`
+		} `json:"message"`
+	}
+	if json.Unmarshal(line, &e) != nil {
+		return false, false
+	}
+	switch e.Type {
+	case "user":
+		return e.ToolEndsTurn, true
+	case "assistant":
+		if e.Message == nil {
+			return false, true
+		}
+		return e.Message.StopReason == "end_turn" || e.Message.StopReason == "stop_sequence", true
+	}
+	return false, false
 }

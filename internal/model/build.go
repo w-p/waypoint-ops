@@ -232,10 +232,12 @@ func listed(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Op
 			if a.Last.After(s.Last) {
 				s.Last = a.Last
 			}
+			subagents(s, a, opt.Now)
 			for _, sp := range a.Spend {
 				snap.spend(sp.At, s.Tool.Name, sp.Tokens, opt.Now)
 			}
 		}
+		snap.Machine.SubagentsLive += s.Live()
 		item := &Item{Project: project, Session: s, Last: s.Last}
 		if p.Blocked() {
 			item.Category = Flagged
@@ -250,6 +252,35 @@ func listed(snap *Snapshot, builders []*builder, claimed map[string]bool, opt Op
 			snap.Machine.SessionsOpen++
 		}
 		snap.Items = append(snap.Items, item)
+	}
+}
+
+// subagentStale is how long an unfinished subagent may go without writing before it is taken to
+// have stopped without handing back (its process killed, say). A subagent running one long tool
+// writes nothing meanwhile, so this is generous.
+const subagentStale = time.Hour
+
+// subagents fills a session's subagents from its transcript reader, when no events named any.
+// A subagent is open until it hands back, ends its turn, or goes stale.
+func subagents(s *Session, a *transcript.Activity, now time.Time) {
+	if len(s.Subagents) > 0 || len(a.Subagents) == 0 {
+		return
+	}
+	s.readSubagents = true
+	for _, sub := range a.Subagents {
+		child := &Session{
+			Project: s.Project,
+			ID:      sub.ID,
+			Kind:    events.Subagent,
+			Parent:  s.ID,
+			Tool:    s.Tool,
+			Started: sub.Started,
+			Last:    sub.Last,
+		}
+		if sub.Done || now.Sub(sub.Last) > subagentStale {
+			child.Ended = sub.Last
+		}
+		s.Subagents = append(s.Subagents, child)
 	}
 }
 
@@ -545,6 +576,7 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 			if a.Last.After(s.Last) {
 				s.Last = a.Last
 			}
+			subagents(s, a, opt.Now)
 			for _, sp := range a.Spend {
 				if today(sp.At) {
 					snap.Machine.TokensToday[s.Tool.Name] += sp.Tokens
@@ -595,6 +627,9 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 			}
 			if s.Kind == events.Interactive {
 				snap.Machine.SessionsOpen++
+			}
+			if s.readSubagents {
+				snap.Machine.SubagentsLive += s.Live()
 			}
 			snap.Items = append(snap.Items, item)
 			continue

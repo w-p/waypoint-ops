@@ -487,3 +487,25 @@ func TestOtherWork(t *testing.T) {
 		t.Errorf("other %d sessions %d; want 2 and 2", snap.Machine.OtherOpen, snap.Machine.SessionsOpen)
 	}
 }
+
+func TestTranscriptSubagents(t *testing.T) {
+	path := "/t/s1.jsonl"
+	p := project(nil, ev(0, events.SessionStarted, "", func(e *events.Event) {
+		e.Session = &events.Session{ID: "s1", Kind: events.Interactive}
+		e.Transcript = &events.Transcript{Path: path, Format: transcript.FormatClaudeCode}
+	}))
+	act := &transcript.Activity{Last: at(100), Turn: transcript.Idle, Subagents: []transcript.Subagent{
+		{ID: "done", Started: at(10), Last: at(20), Done: true},
+		{ID: "running", Started: at(90), Last: at(99)},
+		{ID: "stale", Started: at(10), Last: at(30)}, // unfinished, silent for over an hour
+	}}
+	snap := Build([]*events.Project{p}, Options{Now: at(100), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
+		Activity: map[string]*transcript.Activity{path: act}})
+	if len(snap.Items) != 1 {
+		t.Fatalf("items %d", len(snap.Items))
+	}
+	s := snap.Items[0].Session
+	if len(s.Subagents) != 3 || s.Live() != 1 || snap.Machine.SubagentsLive != 1 {
+		t.Errorf("subagents %d live %d machine %d; want 3, 1, 1", len(s.Subagents), s.Live(), snap.Machine.SubagentsLive)
+	}
+}

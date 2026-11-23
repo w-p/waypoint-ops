@@ -47,8 +47,8 @@ free of file reading beyond what it is handed.
 
 ## Left out
 
-Units' transcripts (a unit's session id is not known until it ends, `conops.md` §8 #5) and
-subagents' transcripts. Telling a session waiting on a permission prompt from one running a long
+Units' transcripts (a unit's session id is not known until it ends, `conops.md` §8 #5).
+Subagents' transcripts were left out at first; see the end of this note. Telling a session waiting on a permission prompt from one running a long
 tool: both read as working on that tool.
 
 ## Where it stands (2026-11-22, built)
@@ -91,3 +91,21 @@ one, in the pilot, was gone. A blocked session was checked in a rendered frame, 
 blocked at the time.
 
 For review: the status panel's "flagged" count includes attention items, in red.
+
+## Subagents from their transcripts (2026-11-22)
+
+Found in daily use: a session showed no subagents while it had two running, because subagents
+came only from events and no project writes events yet. Claude Code writes each subagent's
+transcript beside the session's, in `<session id>/subagents/agent-<id>.jsonl`.
+
+- The reader lists those files with each run of the session's transcript, reading only a file's
+  first line (when it started) and its end (how it stands), and only when the file's size changed.
+- A subagent is done when its last line is the hand-back (a tool result marked `toolEndsTurn`,
+  137 of 144 files on this machine) or a reply that ends its turn (the older ones). Otherwise it is
+  running.
+- It counts as live while it is running, its session is open, and it wrote within the last hour;
+  the hour catches one stopped without handing back, at the cost of a subagent running one tool for
+  over an hour reading as stopped.
+- Events win: when a session's events name its subagents, the transcripts are not used for them.
+
+Checked live: orchard showed `2/46`, matching the two subagents running at the time.

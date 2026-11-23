@@ -137,3 +137,62 @@ func TestRealTranscript(t *testing.T) {
 	t.Logf("read in %v: turn %v tool %q last %v model %s tokens %d context %d replies %d compactions %d minutes %d",
 		time.Since(began), a.Turn, a.Tool, a.Last, a.Model, a.Tokens.Total(), a.Context, a.Replies, a.Compactions, len(a.Spend))
 }
+
+func TestSubagents(t *testing.T) {
+	dir := t.TempDir()
+	main := filepath.Join(dir, "s1.jsonl")
+	subs := filepath.Join(dir, "s1", "subagents")
+	if err := os.MkdirAll(subs, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write := func(path string, lines ...string) {
+		t.Helper()
+		if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write(main, `{"type":"user","timestamp":"2026-11-22T12:00:00Z","message":{"role":"user","content":"go"}}`)
+	write(filepath.Join(subs, "agent-a1.jsonl"),
+		`{"type":"user","isSidechain":true,"timestamp":"2026-11-22T12:01:00Z","message":{"content":"task"}}`,
+		`{"type":"assistant","isSidechain":true,"timestamp":"2026-11-22T12:02:00Z","message":{"stop_reason":"tool_use","content":[{"type":"tool_use","name":"SubagentHandback"}]}}`,
+		`{"type":"user","isSidechain":true,"toolEndsTurn":true,"timestamp":"2026-11-22T12:02:01Z","message":{"content":[{"type":"tool_result"}]}}`)
+	write(filepath.Join(subs, "agent-a2.jsonl"),
+		`{"type":"user","isSidechain":true,"timestamp":"2026-11-22T12:03:00Z","message":{"content":"task"}}`,
+		`{"type":"assistant","isSidechain":true,"timestamp":"2026-11-22T12:04:00Z","message":{"stop_reason":"tool_use","content":[{"type":"tool_use","name":"Bash"}]}}`,
+		`{"type":"api-request","timestamp":"2026-11-22T12:04:01Z"}`)
+	write(filepath.Join(subs, "agent-a3.jsonl"),
+		`{"type":"user","isSidechain":true,"timestamp":"2026-11-22T12:05:00Z","message":{"content":"task"}}`,
+		`{"type":"assistant","isSidechain":true,"timestamp":"2026-11-22T12:06:00Z","message":{"stop_reason":"end_turn","content":[{"type":"text","text":"done"}]}}`)
+	write(filepath.Join(subs, "agent-late.jsonl"),
+		`{"type":"user","isSidechain":true,"timestamp":"2026-11-22T13:00:00Z","message":{"content":"task"}}`)
+
+	r := NewReader(main)
+	if err := r.Read(time.Date(2026, 11, 22, 12, 30, 0, 0, time.UTC)); err != nil {
+		t.Fatal(err)
+	}
+	got := r.Activity().Subagents
+	want := []struct {
+		id   string
+		done bool
+	}{{"a1", true}, {"a2", false}, {"a3", true}}
+	if len(got) != len(want) {
+		t.Fatalf("got %d subagents, want %d (one started after the clock): %+v", len(got), len(want), got)
+	}
+	for i, w := range want {
+		if got[i].ID != w.id || got[i].Done != w.done {
+			t.Errorf("subagent %d: %s done %v; want %s done %v", i, got[i].ID, got[i].Done, w.id, w.done)
+		}
+	}
+	if !got[1].Last.Equal(time.Date(2026, 11, 22, 12, 4, 1, 0, time.UTC)) {
+		t.Errorf("running subagent last %v", got[1].Last)
+	}
+
+	// The running one hands back; only its file is read again.
+	f, _ := os.OpenFile(filepath.Join(subs, "agent-a2.jsonl"), os.O_APPEND|os.O_WRONLY, 0)
+	f.WriteString(`{"type":"user","isSidechain":true,"toolEndsTurn":true,"timestamp":"2026-11-22T12:10:00Z","message":{"content":[{"type":"tool_result"}]}}` + "\n")
+	f.Close()
+	r.Read(time.Date(2026, 11, 22, 12, 30, 0, 0, time.UTC))
+	if got := r.Activity().Subagents; !got[1].Done {
+		t.Errorf("subagent a2 not done after its hand-back")
+	}
+}

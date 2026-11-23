@@ -6,7 +6,7 @@
      The Phase line is machine-read by the adapters' hooks: keep exactly one line
      starting **Phase:** naming Ideation, Planning, or Execution. -->
 
-**Phase:** Execution — building the first slice (`plan/first-slice.md`) to review running; its design is provisional and changes with each review (approved 2026-11-21).
+**Phase:** Execution — first slice done and in daily use (`plan/first-slice.md`); changes come from use; next: Cursor (2026-11-23) and real run events from the pilot (approved 2026-11-21).
 
 **Shipped:**
 
@@ -27,6 +27,8 @@
   watched project they run in; those outside every watched project are dimmed below the rest, `o`
   or `other_work` to hide them; a unit session the runner's events do not name joins its running
   unit (`design/other-work.md`). Committed with the running-session list (`7516ada`).
+- Subagents read from their own transcripts (running, handed back), so sessions without events
+  show their subagents (`design/transcript-reader.md`).
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
