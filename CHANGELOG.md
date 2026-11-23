@@ -2,7 +2,7 @@
 
 What changed between releases, newest first.
 
-## Unreleased
+## 0.3.1 (2026-11-23)
 
 - A run's unit counts say what they count ("0/2 done"), and the runs gauge shows the unit under
   way in a lighter shade after the finished ones, so a run on its first unit no longer looks
