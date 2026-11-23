@@ -15,6 +15,12 @@ when none fits.
 - Lead with whether action is needed, then the answer; pick the right answer rather than
   offering a menu. (baseline 2026-10-12)
 
+## Reading requests
+
+- When a request names a technique without naming what it applies to ("a flexbox-like layout"),
+  apply it to everything on screen it could mean, or ask which, before building one reading.
+  (promoted 2026-11-23 from memory/2026-11-23-session-condition.md)
+
 ## Costs and alternatives
 
 - A question about cost, time or risk is answered with whether the cost is necessary

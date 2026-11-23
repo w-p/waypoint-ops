@@ -1,4 +1,5 @@
-Session condition, machine load, Windows builds and a responsive screen layout built and released as v0.3.0; CI passed on Linux, macOS and Windows.
+Session condition, machine load, Windows builds and a responsive screen layout built and released (v0.3.0, then v0.3.1 after the pilot's mock run); CI passed on Linux, macOS and Windows.
+promoted: sop.md#reading-requests
 
 ## Morning: the pilot's fatigue, then its rethink
 
@@ -79,6 +80,21 @@ Session condition, machine load, Windows builds and a responsive screen layout b
   part-filled cell (eighths), leaving a blank sliver. With a share under way, the solid share now
   ends on a whole cell; a test checks every width from 4 to 60.
 
+- Committed (`493f151`), CI passed on all jobs, released as v0.3.1; the Linux and Windows builds
+  were downloaded, checked against `checksums.txt` and report v0.3.1.
+
+## Lesson
+
+- "A flexbox-like layout" was read as the board's columns; the developer meant the panels, and
+  tried the build before saying so. Promoted to `sop.md` (reading requests): apply a named technique
+  to everything it could mean, or ask which.
+
 ## Next
 
-- The pilot runs a mock workload to try it out.
+- The Cursor check, planned for today, not started.
+- Watch more of the pilot's real runs; the breakpoints (a second panel row, the sidebar from 230
+  columns, the 12 rows kept for the board) are guesses to judge in use.
+- Worked-out fatigue copies the pilot's thresholds; they do not follow its retuning on their own.
+- GPUs, history files.
+- `.waypoint/features/` is empty: as-built state lives in the design notes. Worth settling which
+  the project keeps.

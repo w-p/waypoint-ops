@@ -6,7 +6,7 @@
      The Phase line is machine-read by the adapters' hooks: keep exactly one line
      starting **Phase:** naming Ideation, Planning, or Execution. -->
 
-**Phase:** Execution — first slice done and in daily use (`plan/first-slice.md`); changes come from use; next: Cursor (2026-11-23) and real run events from the pilot (approved 2026-11-21).
+**Phase:** Execution — first slice done and in daily use (`plan/first-slice.md`); changes come from use; next: the Cursor check (planned for 2026-11-23, not started), then more of the pilot's real runs.
 
 **Shipped:**
 
@@ -42,10 +42,13 @@
   worse, the app's own use) and per-session and per-run CPU and memory. Windows builds again; CI
   tests on macOS and Windows (`design/session-condition.md`). The screen lays itself out for its
   size: top panels flex and stack, `s` hides them, the detail panel sits beside the board from 230
-  columns, board columns shrink before any is dropped (`design/first-slice.md`). Released as v0.3.0.
+  columns, board columns shrink before any is dropped (`design/first-slice.md`). Released as v0.3.0;
+  v0.3.1 shows a run's unit under way in its gauge, labels counts "done" and shows a running unit's
+  model.
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
-  the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
-  appear once the pilot's runner writes events (`contract-proposals.md` §4).
+  the repo). From 2026-11-23 the pilot's runner writes run events and its sessions write
+  `session.condition`; its mock run that day checked the runs panel, unit gauges and condition
+  readings live. Other projects show live Claude Code sessions only.
 
 **Approach**
 
