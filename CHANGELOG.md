@@ -2,7 +2,7 @@
 
 What changed between releases, newest first.
 
-## Unreleased
+## 0.2.0 (2026-11-22)
 
 - **Session events from Waypoint's hooks.** A session waiting on a permission prompt is
   highlighted in amber and one waiting for input shows as waiting, for any tool whose hooks write
