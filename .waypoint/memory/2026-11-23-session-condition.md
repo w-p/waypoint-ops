@@ -1,4 +1,4 @@
-Session condition (the pilot's `session.condition`, plus fatigue worked out from transcripts) and machine load built; Windows builds again; CI tests on macOS and Windows; the screen now lays itself out responsively. Not yet committed.
+Session condition, machine load, Windows builds and a responsive screen layout built and released as v0.3.0; CI passed on Linux, macOS and Windows.
 
 ## Morning: the pilot's fatigue, then its rethink
 
@@ -61,7 +61,13 @@ Session condition (the pilot's `session.condition`, plus fatigue worked out from
   the summary line only under 40 columns or when the board and detail would keep fewer than 12
   rows, and the line says so.
 
+## Released
+
+- The developer approved ("This is perfect. Send it."). Committed (`91b2185`) and pushed; CI passed
+  on all jobs, including the first macOS and Windows runs (tests and a live frame). Released as
+  v0.3.0: six archives with checksums; the Linux and Windows builds were downloaded, checked against
+  `checksums.txt` and report v0.3.0.
+
 ## Next
 
 - The pilot runs a mock workload to try it out.
-- Release once the developer has seen it.

@@ -40,7 +40,9 @@
   and one flag) from the pilot's `session.condition`, a fatigue reading worked out from the
   transcript (marked `≈`) for sessions without one, a machine panel (CPU, memory, sessions tiring or
   worse, the app's own use) and per-session and per-run CPU and memory. Windows builds again; CI
-  tests on macOS and Windows (`design/session-condition.md`). Not yet released.
+  tests on macOS and Windows (`design/session-condition.md`). The screen lays itself out for its
+  size: top panels flex and stack, `s` hides them, the detail panel sits beside the board from 230
+  columns, board columns shrink before any is dropped (`design/first-slice.md`). Released as v0.3.0.
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
