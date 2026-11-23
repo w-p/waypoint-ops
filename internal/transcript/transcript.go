@@ -64,6 +64,19 @@ type Activity struct {
 	Compactions int
 	Replies     int
 
+	// First is the earliest timestamped line.
+	First time.Time
+
+	// LastCompaction is when the latest compaction happened.
+	LastCompaction time.Time
+
+	// Work counts work items since the latest compaction, and WorkSummarized those before each
+	// compaction, summed: the work the session's context lost to summaries. A work item is a file
+	// edit outside the Waypoint memory folder, a subagent started, or a shell command that commits
+	// or writes files, counted as the pilot's events hook counts them.
+	Work           int
+	WorkSummarized int
+
 	// Spend is token use per minute, oldest first.
 	Spend []Spend
 
@@ -214,12 +227,16 @@ type block struct {
 		FilePath     string `json:"file_path"`
 		NotebookPath string `json:"notebook_path"`
 		Path         string `json:"path"`
+		Command      string `json:"command"`
 	} `json:"input"`
 }
 
 func (r *Reader) apply(line []byte, at time.Time) {
 	if at.After(r.act.Last) {
 		r.act.Last = at
+	}
+	if r.act.First.IsZero() && !at.IsZero() {
+		r.act.First = at
 	}
 	interesting := false
 	for _, w := range wanted {
@@ -240,6 +257,11 @@ func (r *Reader) apply(line []byte, at time.Time) {
 		switch e.Subtype {
 		case "compact_boundary":
 			r.act.Compactions++
+			r.act.WorkSummarized += r.act.Work
+			r.act.Work = 0
+			if !at.IsZero() {
+				r.act.LastCompaction = at
+			}
 		case "stop_hook_summary":
 			r.turn(Idle, at, "", "")
 		}
@@ -298,6 +320,11 @@ func (r *Reader) assistant(e entry, at time.Time) {
 		}
 	}
 	blocks, _ := content(m.Content)
+	for _, b := range blocks {
+		if b.Type == "tool_use" && isWork(b) {
+			r.act.Work++
+		}
+	}
 	for i := len(blocks) - 1; i >= 0; i-- {
 		if b := blocks[i]; b.Type == "tool_use" {
 			target := ""

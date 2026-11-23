@@ -1,7 +1,8 @@
 name: release
 
-# Pushing a tag like v0.1.0 tests the code, builds the app for Linux and macOS, and publishes a
-# GitHub release with the archives, their checksums, and the tag's section of CHANGELOG.md.
+# Pushing a tag like v0.1.0 tests the code, builds the app for Linux, macOS and Windows, and
+# publishes a GitHub release with the archives, their checksums, and the tag's section of
+# CHANGELOG.md.
 
 on:
   push:
@@ -25,16 +26,22 @@ jobs:
           VERSION: ${{ github.ref_name }}
         run: |
           mkdir dist
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             os=${target%/*} arch=${target#*/}
             name=waypoint-ops_${VERSION#v}_${os}_${arch}
+            exe=waypoint-ops
+            if [ "$os" = windows ]; then exe=waypoint-ops.exe; fi
             mkdir -p "build/$name"
             GOOS=$os GOARCH=$arch CGO_ENABLED=0 go build -trimpath \
-              -ldflags "-s -w -X main.version=$VERSION" -o "build/$name/waypoint-ops" ./cmd/waypoint-ops
+              -ldflags "-s -w -X main.version=$VERSION" -o "build/$name/$exe" ./cmd/waypoint-ops
             cp README.md CHANGELOG.md "build/$name/"
-            tar -C build -czf "dist/$name.tar.gz" "$name"
+            if [ "$os" = windows ]; then
+              (cd build && zip -qr "../dist/$name.zip" "$name")
+            else
+              tar -C build -czf "dist/$name.tar.gz" "$name"
+            fi
           done
-          (cd dist && sha256sum *.tar.gz > checksums.txt)
+          (cd dist && sha256sum *.tar.gz *.zip > checksums.txt)
       - name: Release notes
         env:
           VERSION: ${{ github.ref_name }}

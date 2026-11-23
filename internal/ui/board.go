@@ -13,30 +13,44 @@ import (
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
-// column is one board column.
+// column is one board column. Like a flex item it has the width it prefers, the least it can
+// take (min; 0 means it never shrinks) and its share of any spare room (grow).
 type column struct {
 	key   string
 	title string
 	width int
+	min   int
+	grow  int
 	right bool
 }
 
-// columns are the board's columns, left to right. The state column takes any spare width; on a
-// narrow terminal columns are dropped in dropOrder until the rest fit.
+// columns are the board's columns, left to right: key, title, width, min, grow, right-aligned.
+// The layout shrinks them toward their minimums on a narrow terminal and drops columns only when
+// even those do not fit; the state column takes any spare width.
 var columns = []column{
-	{"mark", "", 1, false},
-	{"project", "PROJECT", 12, false},
-	{"kind", "KIND", 8, false},
-	{"name", "NAME", 15, false},
-	{"tool", "TOOL", 11, false},
-	{"model", "MODEL", 9, false},
-	{"state", "STATE", 30, false},
-	{"units", "UNITS", 22, false},
-	{"subagents", "SUBAGENTS", 12, false},
-	{"job", "JOB", 16, false},
-	{"started", "STARTED", 11, false},
-	{"elapsed", "ELAPSED", 8, true},
-	{"tokens", "TOKENS", 6, true},
+	{"mark", "", 1, 0, 0, false},
+	{"project", "PROJECT", 12, 8, 0, false},
+	{"kind", "KIND", 8, 0, 0, false},
+	{"name", "NAME", 15, 8, 0, false},
+	{"tool", "TOOL", 11, 6, 0, false},
+	{"model", "MODEL", 9, 7, 0, false},
+	{"state", "STATE", 28, 22, 1, false},
+	{"cond", "CONDITION", 20, 11, 0, false},
+	{"units", "UNITS", 22, 14, 0, false},
+	{"subagents", "SUBAGENTS", 12, 9, 0, false},
+	{"job", "JOB", 16, 10, 0, false},
+	{"load", "  CPU   MEM", 11, 0, 0, false},
+	{"started", "STARTED", 11, 0, 0, false},
+	{"elapsed", "ELAPSED", 8, 7, 0, true},
+	{"tokens", "TOKENS", 6, 0, 0, true},
+}
+
+// least is the narrowest a column can be.
+func (c column) least() int {
+	if c.min == 0 {
+		return c.width
+	}
+	return c.min
 }
 
 // part is a run of text in one style; a cell is one or more parts.
@@ -59,43 +73,124 @@ func plainText(parts []part) string {
 	return b.String()
 }
 
-// dropOrder is the order columns leave a narrow board, least needed first.
-var dropOrder = []string{"tool", "started", "model", "job", "tokens", "subagents", "elapsed", "kind"}
+// dropOrder is the order columns leave a board too narrow for every column at its minimum, least
+// needed first.
+var dropOrder = []string{"tool", "started", "model", "load", "job", "tokens", "subagents", "elapsed", "cond", "kind"}
 
-// layout returns the columns shown at a width: the project column is dropped while one project
-// is in focus, columns in dropOrder go until the rest fit, and the state column grows into any
-// spare room.
-func layout(focus string, width int) []column {
-	gone := map[string]bool{"project": focus != ""}
-	need := func() int {
-		used := 1 // the leading space, and one cell of margin on the right
-		for _, c := range columns {
-			if !gone[c.key] {
-				used += c.width + 1
+// boardWidth is the width columns take at the given widths: a leading space, a space after each.
+func boardWidth(cols []column, width func(column) int) int {
+	used := 1
+	for _, c := range cols {
+		used += width(c) + 1
+	}
+	return used
+}
+
+// layout returns the columns shown at a width and how wide each is. Content, when given, is the
+// widest cell in each column: a column never asks for more than that (or its title), so room goes
+// to the columns with text to show. The project column is dropped while one project is in focus;
+// columns in dropOrder go only while the rest do not fit at their minimums; then the columns flex
+// to fill the width exactly.
+func layout(focus string, width int, content map[string]int) []column {
+	sized := make([]column, len(columns))
+	copy(sized, columns)
+	if content != nil {
+		for i := range sized {
+			c := &sized[i]
+			if c.grow > 0 {
+				continue
+			}
+			want := max(content[c.key], runewidth.StringWidth(c.title), 1)
+			if want < c.width {
+				c.min = min(c.least(), want)
+				c.width = want
 			}
 		}
-		return used
+	}
+	gone := map[string]bool{"project": focus != ""}
+	shown := func() []column {
+		var out []column
+		for _, c := range sized {
+			if !gone[c.key] {
+				out = append(out, c)
+			}
+		}
+		return out
 	}
 	for _, key := range dropOrder {
-		if need() <= width {
+		if boardWidth(shown(), column.least) <= width {
 			break
 		}
 		gone[key] = true
 	}
-	var out []column
-	for _, c := range columns {
-		if !gone[c.key] {
-			out = append(out, c)
+	cols := shown()
+	room := width - boardWidth(cols, func(c column) int { return c.width })
+	switch {
+	case room > 0:
+		share(cols, room, func(c column) int { return c.grow }, 1)
+	case room < 0:
+		// The columns that grow are read first, so they give way last.
+		short := -room
+		for _, growing := range []bool{false, true} {
+			before := boardWidth(cols, func(c column) int { return c.width })
+			share(cols, short, func(c column) int {
+				if (c.grow > 0) != growing {
+					return 0
+				}
+				return c.width - c.least()
+			}, -1)
+			short -= before - boardWidth(cols, func(c column) int { return c.width })
 		}
 	}
-	if spare := width - need(); spare > 0 {
-		for i := range out {
-			if out[i].key == "state" {
-				out[i].width += spare
+	return cols
+}
+
+// contentWidths is the widest cell in each column over the given rows.
+func (v *view) contentWidths(lists ...[]*model.Item) map[string]int {
+	widths := map[string]int{}
+	for _, items := range lists {
+		for _, item := range items {
+			for key, parts := range v.cells(item, false) {
+				widths[key] = max(widths[key], runewidth.StringWidth(plainText(parts)))
 			}
 		}
 	}
-	return out
+	return widths
+}
+
+// share grows (sign 1) or shrinks (sign -1) the columns by n cells in all, each in proportion to
+// its weight. A column shrinks by no more than its weight, which is how far it can give.
+func share(cols []column, n int, weight func(column) int, sign int) {
+	weights := make([]int, len(cols))
+	total := 0
+	for i, c := range cols {
+		weights[i] = max(0, weight(c))
+		total += weights[i]
+	}
+	if total == 0 {
+		return
+	}
+	if sign < 0 {
+		n = min(n, total)
+	}
+	given := make([]int, len(cols))
+	left := n
+	for i, w := range weights {
+		given[i] = n * w / total
+		left -= given[i]
+	}
+	// Rounding leaves a few cells; hand them out one at a time, left to right.
+	for left > 0 {
+		for i, w := range weights {
+			if left > 0 && w > 0 && (sign > 0 || given[i] < w) {
+				given[i]++
+				left--
+			}
+		}
+	}
+	for i := range cols {
+		cols[i].width += sign * given[i]
+	}
 }
 
 // tinted gives a style the row's background, when it has one.
@@ -191,7 +286,7 @@ func (v *view) cells(item *model.Item, finished bool) cells {
 	}
 	if finished && item.Flag == "" {
 		for key, parts := range c {
-			if key == "state" || key == "mark" || key == "units" {
+			if key == "state" || key == "mark" || key == "units" || key == "cond" {
 				continue
 			}
 			for i := range parts {
@@ -250,6 +345,12 @@ func (v *view) runCells(c cells, item *model.Item) {
 	c["subagents"] = v.dots(r.Subagents(), r.State != model.Finished && r.State != model.Died)
 	c["job"] = v.jobCell(r)
 	c["started"] = one(clock(r.Started), s.dim)
+	var cond *model.Condition
+	if u := r.Running(); u != nil {
+		cond = u.Condition
+	}
+	c["cond"] = v.conditionCell(cond)
+	c["load"] = v.loadCell(r.Load)
 	elapsed := span(r.Elapsed(now))
 	if r.State == model.Died {
 		// The runner's death was not recorded, so the run lasted at least this long.
@@ -479,6 +580,8 @@ func (v *view) sessionCells(c cells, item *model.Item) {
 	c["subagents"] = v.dots(sess.Subagents, sess.Open())
 	c["job"] = one("—", s.dim)
 	c["started"] = one(clock(sess.Started), s.dim)
+	c["cond"] = v.conditionCell(sess.Condition)
+	c["load"] = v.loadCell(sess.Load)
 	elapsed := now.Sub(sess.Started)
 	if !sess.Open() {
 		elapsed = sess.Ended.Sub(sess.Started)

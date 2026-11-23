@@ -32,6 +32,9 @@ func (v *view) box(title, note, footer string, width, height int, body []string)
 		var b strings.Builder
 		b.WriteString(s.border.Render(left + "─"))
 		used := 1
+		if limit := inner - 6; label != "" && ansi.StringWidth(label) > limit {
+			label = ansi.Truncate(label, max(1, limit), "…")
+		}
 		if label != "" {
 			b.WriteString(s.border.Render("┤") + labelStyle.Render(" "+label+" ") + s.border.Render("├"))
 			used += ansi.StringWidth(label) + 4

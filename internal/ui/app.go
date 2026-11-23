@@ -15,6 +15,7 @@ import (
 	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
 	"github.com/w-p/waypoint-ops/internal/model"
+	"github.com/w-p/waypoint-ops/internal/procs"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
@@ -37,9 +38,16 @@ type Options struct {
 	// OtherWork shows Claude Code sessions that no event names, dimmed (`design/other-work.md`).
 	OtherWork bool
 
+	// HideStats starts with the panels across the top hidden; the s key shows them.
+	HideStats bool
+
 	// Still turns animation off: gauges and graphs are drawn at their values straight away, and
 	// transcripts are read before the first frame instead of in the background.
 	Still bool
+
+	// Load samples the machine's CPU and memory, and each open session's and run's, on every
+	// refresh. Off when the clock has been moved into the past.
+	Load bool
 }
 
 // App is the Bubble Tea model.
@@ -52,6 +60,7 @@ type App struct {
 	focus  string
 	recent bool
 	other  bool
+	stats  bool
 	cursor int
 
 	// selected is the key of the selected item, so the selection survives a refresh.
@@ -77,7 +86,15 @@ type App struct {
 	running claude.List
 	asking  bool
 	local   []string
+
+	// Load: the sampler, its latest reading, and whether a sample is being taken.
+	sampler  *procs.Sampler
+	usage    procs.Reading
+	sampling bool
 }
+
+// usageMsg carries a load sample.
+type usageMsg procs.Reading
 
 // runningMsg carries a reading of Claude Code's running sessions.
 type runningMsg struct {
@@ -114,6 +131,7 @@ func New(opt Options) *App {
 		height: 50,
 		recent: true,
 		other:  opt.OtherWork,
+		stats:  !opt.HideStats,
 
 		spring:  harmonica.NewSpring(harmonica.FPS(fps), 5.0, 0.6),
 		springs: map[string]*motion{},
@@ -122,6 +140,9 @@ func New(opt Options) *App {
 		readers:  map[string]*transcript.Reader{},
 		activity: map[string]*transcript.Activity{},
 		local:    localTranscripts(),
+	}
+	if opt.Load {
+		a.sampler = procs.NewSampler()
 	}
 	a.scan()
 	if opt.Still && opt.Live {
@@ -134,8 +155,53 @@ func New(opt Options) *App {
 		if read := a.readTranscripts(); read != nil {
 			a.apply(read().(activityMsg))
 		}
+		if a.sampler != nil {
+			// CPU is use over time, so one frame needs two samples.
+			a.sampler.Sample(a.roots())
+			time.Sleep(stillSample)
+			a.takeUsage(usageMsg(a.sampler.Sample(a.roots())))
+		}
 	}
 	return a
+}
+
+// stillSample is the gap between the two load samples of a single frame.
+const stillSample = 300 * time.Millisecond
+
+// roots are the processes whose load is sampled: each open session's and each live runner's.
+func (a *App) roots() []int {
+	var out []int
+	for _, item := range a.snap.Items {
+		switch {
+		case item.Run != nil && item.Run.Alive:
+			out = append(out, item.Run.PID)
+		case item.Session != nil && item.Session.Open() && !item.Session.Gone:
+			if pid := item.Session.ProcessID(); pid > 0 {
+				out = append(out, pid)
+			}
+		}
+	}
+	return out
+}
+
+// sample returns a command that takes a load sample off the screen's thread, or nil when
+// sampling is off or a sample is already being taken.
+func (a *App) sample() tea.Cmd {
+	if a.sampler == nil || a.sampling {
+		return nil
+	}
+	a.sampling = true
+	roots := a.roots()
+	sampler := a.sampler
+	return func() tea.Msg {
+		return usageMsg(sampler.Sample(roots))
+	}
+}
+
+func (a *App) takeUsage(msg usageMsg) {
+	a.sampling = false
+	a.usage = procs.Reading(msg)
+	a.build()
 }
 
 // load rereads every project, rebuilds the snapshot, and returns the command that reads the
@@ -167,6 +233,7 @@ func (a *App) build() {
 		Running:          a.running,
 		LocalTranscripts: a.local,
 		OtherWork:        a.other,
+		Load:             a.usage,
 	})
 	for i, p := range a.snap.Projects {
 		if msg, ok := a.errs[p.Name]; ok {
@@ -327,7 +394,7 @@ func (a *App) next() tea.Cmd {
 // Init starts the refresh timer and the animation.
 func (a *App) Init() tea.Cmd {
 	a.frames = true
-	return tea.Batch(a.next(), a.frame(), a.readTranscripts(), a.askRunning())
+	return tea.Batch(a.next(), a.frame(), a.readTranscripts(), a.askRunning(), a.sample())
 }
 
 // frame schedules the next animation frame: fast while a spring is moving, slower when only the
@@ -378,7 +445,9 @@ func (a *App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		a.width = msg.Width
 		a.height = msg.Height
 	case tick:
-		return a, tea.Batch(a.next(), a.load())
+		return a, tea.Batch(a.next(), a.load(), a.sample())
+	case usageMsg:
+		a.takeUsage(msg)
 	case activityMsg:
 		a.apply(msg)
 	case runningTick:
@@ -427,6 +496,8 @@ func (a *App) key(k string) tea.Cmd {
 	case "o":
 		a.other = !a.other
 		a.build()
+	case "s":
+		a.stats = !a.stats
 	}
 	a.remember()
 	return nil
@@ -447,6 +518,7 @@ func (a *App) Frame(width, height int) string {
 		focus:   a.focus,
 		recent:  a.recent,
 		other:   a.other,
+		stats:   a.stats,
 		cursor:  a.cursor,
 		refresh: a.opt.Refresh.String(),
 		window:  a.opt.Recent,

@@ -1,16 +1,15 @@
 package model
 
 import (
-	"errors"
 	"fmt"
 	"path/filepath"
 	"sort"
 	"strings"
-	"syscall"
 	"time"
 
 	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
+	"github.com/w-p/waypoint-ops/internal/procs"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
@@ -42,6 +41,9 @@ type Options struct {
 	// OtherWork shows sessions in Running that no event names and that run outside every
 	// watched project (`design/other-work.md`). Those inside a watched project always show.
 	OtherWork bool
+
+	// Load is the latest sample of the machine and of the processes of open sessions and runs.
+	Load procs.Reading
 }
 
 // local reports whether a transcript path is in this machine's Claude Code folder.
@@ -57,11 +59,7 @@ func (o Options) local(path string) bool {
 // ProcessAlive reports whether pid names a running process. A process owned by another user
 // still counts as alive.
 func ProcessAlive(pid int) bool {
-	if pid <= 0 {
-		return false
-	}
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
+	return procs.Alive(pid)
 }
 
 // Build makes a snapshot from every project's events.
@@ -71,7 +69,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 	}
 	snap := Snapshot{
 		Now:     opt.Now,
-		Machine: Machine{TokensToday: map[string]int64{}},
+		Machine: Machine{TokensToday: map[string]int64{}, Load: opt.Load},
 		Listed:  opt.Running.OK,
 	}
 	var builders []*builder
@@ -97,6 +95,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 		b.place(&snap, opt)
 	}
 	listed(&snap, builders, claimed, opt)
+	conditions(&snap, opt)
 	sort.SliceStable(snap.Items, func(i, j int) bool {
 		a, b := snap.Items[i], snap.Items[j]
 		if ra, rb := rank(a), rank(b); ra != rb {
@@ -477,6 +476,7 @@ func (b *builder) addSession(e events.Event) {
 		}
 		if e.PID > 0 {
 			s.PID = e.PID
+			s.pidAt = e.TS
 		}
 		if e.Transcript != nil {
 			s.Transcript = e.Transcript.Path
@@ -490,6 +490,8 @@ func (b *builder) addSession(e events.Event) {
 	case events.SessionMemory:
 		s.Memory++
 		s.MemoryFile = e.File
+	case events.SessionCondition:
+		s.Condition = &Condition{Condition: e.Condition, At: e.TS}
 	case events.SessionEnded:
 		s.Ended = e.TS
 		s.Duration = e.Duration()
@@ -604,9 +606,11 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 		}
 		if r.State != Finished {
 			snap.Machine.RunsUnfinished++
-		}
-		if r.Alive {
-			snap.Machine.RunnersAlive++
+			// A finished run's runner may linger a moment, or its pid be reused; only runners of
+			// unfinished runs count.
+			if r.Alive {
+				snap.Machine.RunnersAlive++
+			}
 		}
 
 		item := runItem(r)

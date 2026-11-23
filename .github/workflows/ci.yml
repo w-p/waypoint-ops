@@ -22,8 +22,28 @@ jobs:
         run: go vet ./...
       - name: Test
         run: go test -race ./...
-      - name: Build (Linux and macOS)
+      - name: Build (Linux, macOS and Windows)
         run: |
-          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64; do
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64 windows/arm64; do
             GOOS=${target%/*} GOARCH=${target#*/} CGO_ENABLED=0 go build -o /dev/null ./cmd/waypoint-ops
           done
+
+  # The process sampler and liveness check differ per platform, so the tests and one frame run on
+  # each: the frame samples real processes and draws the machine panel.
+  platforms:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - name: Test
+        run: go test ./...
+      - name: One frame
+        env:
+          CGO_ENABLED: '0'
+        run: go run ./cmd/waypoint-ops -once -width 180 -height 40 -color never .

@@ -12,7 +12,8 @@
 - **Only GitHub's own actions** (`actions/checkout`, `actions/setup-go`) and the `gh` command on
   the runner; no release tool to install or trust. GoReleaser would add packaging (Homebrew,
   deb) when someone needs it.
-- **No Windows build:** the process check uses `syscall.Kill`, and the app's home is WSL. A
-  Windows build needs a Windows process check first.
+- **Windows build (from 2026-11-23):** the process check and the load sampler have a file per
+  platform (`internal/procs`), so Windows builds again, as zip archives for amd64 and arm64. CI
+  runs the tests and one frame on macOS and Windows runners as well (`design/session-condition.md`).
 - **Versioning:** semantic versions from `v0.1.0`; `0.x` while the design is provisional.
   `waypoint-ops -version` prints it (`dev` for local builds).

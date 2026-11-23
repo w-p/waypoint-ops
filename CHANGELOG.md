@@ -2,6 +2,27 @@
 
 What changed between releases, newest first.
 
+## Unreleased
+
+- **Session condition.** A CONDITION column shows how tired each session is (fresh, working,
+  tiring, tired, exhausted) and flags one that just compacted, has unsaved work while a compaction
+  could come, or has a stale picture of its project. It comes from Waypoint's `session.condition`
+  where a project writes it; for any other Claude Code session, the app works out its fatigue from
+  the transcript's compactions and marks it `≈`. The detail panel shows the measures behind each
+  reading.
+- **Machine load.** A machine panel shows CPU and memory in use, how many sessions are tiring or
+  worse, and what the app itself uses. Each session and run shows the CPU and memory of its
+  process and everything it started (builds, tests, units).
+- **Windows.** Windows builds are back, and every release is tested on Linux, macOS and Windows.
+- **The screen lays itself out for its size,** as a responsive web page does. The panels across
+  the top flex to fill the width (gauges and the token graph widen with them) and stack, two by two
+  and then one above another, as the screen narrows, instead of disappearing. The `s` key (or
+  `stats = false` in the settings) hides them, leaving one summary line. On a wide screen the detail panel moves beside the board, and long detail lines
+  wrap instead of being cut off. The board's columns shrink to fit (text cut with `…`) instead of
+  disappearing, and a column holding only short cells gives its room to the state column.
+- The machine count of runners alive no longer counts a finished run's runner.
+- A process id that was reused by another program is no longer taken for a session's.
+
 ## 0.2.0 (2026-11-22)
 
 - **Session events from Waypoint's hooks.** A session waiting on a permission prompt is

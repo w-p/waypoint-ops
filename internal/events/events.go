@@ -26,6 +26,7 @@ const (
 	SessionModel     = "session.model"
 	SessionCompacted = "session.compacted"
 	SessionMemory    = "session.memory_written"
+	SessionCondition = "session.condition"
 	SessionEnded     = "session.ended"
 )
 
@@ -113,7 +114,40 @@ type Event struct {
 	// session.started: startup, resume or clear. A resumed session writes session.started again
 	// under the same id.
 	Source string `json:"source"`
+
+	// session.condition
+	Condition
 }
+
+// Condition is a session.condition record: three readings, two flags, and the measures behind
+// them. A measure the writer could not read is left out (nil). The thresholds that turn measures
+// into readings are the writer's, not the contract's.
+type Condition struct {
+	// Fatigue: fresh, working, tiring, tired or exhausted.
+	Fatigue string `json:"fatigue"`
+	// Drift: current, aging or stale.
+	Drift string `json:"drift"`
+	// Unsaved: none, some or lots.
+	Unsaved string `json:"unsaved"`
+
+	JustCompacted      bool `json:"just_compacted"`
+	CompactionPossible bool `json:"compaction_possible"`
+
+	Hours          *float64 `json:"hours"`
+	Compactions    *int     `json:"compactions"`
+	WorkSummarized *int     `json:"work_summarized"`
+	ContextK       *int     `json:"context_k"`
+	StateCheckH    *float64 `json:"state_check_h"`
+	OutsideCommits *int     `json:"outside_commits"`
+	UnsavedWork    *int     `json:"unsaved_work"`
+}
+
+// Readings of a session.condition record, in rising order.
+var (
+	FatigueLevels = []string{"fresh", "working", "tiring", "tired", "exhausted"}
+	DriftLevels   = []string{"current", "aging", "stale"}
+	UnsavedLevels = []string{"none", "some", "lots"}
+)
 
 // Reasons a session waits (session.waiting).
 const (

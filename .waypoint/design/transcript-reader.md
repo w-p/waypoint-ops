@@ -111,3 +111,12 @@ transcript beside the session's, in `<session id>/subagents/agent-<id>.jsonl`.
 - Events win: when a session's events name its subagents, the transcripts are not used for them.
 
 Checked live: orchard showed `2/46`, matching the two subagents running at the time.
+
+## Work and compactions, for fatigue (2026-11-23)
+
+The reader also counts work items (file edits outside `.waypoint/memory/`, subagents started,
+shell commands that commit or write files) and, at each compaction marker, adds the work since the
+previous one to the work summarized away, the way the pilot's events hook counts them. It keeps
+when the first line and the latest compaction were written. Commands are matched, never kept or
+shown. These feed the fatigue reading worked out for sessions without a `session.condition`
+(`session-condition.md`).

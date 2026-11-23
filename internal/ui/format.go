@@ -94,3 +94,23 @@ func plural(n int, word string) string {
 	}
 	return fmt.Sprintf("%d %ss", n, word)
 }
+
+// bytes formats a memory size: 340M, 1.2G, 15G.
+func bytes(n uint64) string {
+	const mb, gb = 1 << 20, 1 << 30
+	switch {
+	case n < 10*mb:
+		return fmt.Sprintf("%.1fM", float64(n)/mb)
+	case n < gb:
+		return fmt.Sprintf("%dM", n/mb)
+	case n < 10*gb:
+		return fmt.Sprintf("%.1fG", float64(n)/gb)
+	default:
+		return fmt.Sprintf("%dG", n/gb)
+	}
+}
+
+// percent formats a CPU figure: 0%, 34%, 143%.
+func percent(p float64) string {
+	return fmt.Sprintf("%.0f%%", p)
+}

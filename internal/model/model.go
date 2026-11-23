@@ -9,6 +9,7 @@ import (
 
 	"github.com/w-p/waypoint-ops/internal/claude"
 	"github.com/w-p/waypoint-ops/internal/events"
+	"github.com/w-p/waypoint-ops/internal/procs"
 	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
@@ -72,6 +73,9 @@ type Run struct {
 	PID   int
 	Alive bool
 
+	// Load is the runner's CPU and memory with everything under it, its units included.
+	Load *procs.Usage
+
 	Units []*Unit
 	Jobs  []*Job
 }
@@ -97,6 +101,10 @@ type Unit struct {
 
 	// Activity is what a transcript reader found in the unit's transcript.
 	Activity *transcript.Activity
+
+	// Condition is the unit session's condition record, or a fatigue reading worked out from the
+	// running unit's transcript.
+	Condition *Condition
 }
 
 // TranscriptAt is where the unit's transcript is and how it is written: from the runner's events,
@@ -145,8 +153,9 @@ type Session struct {
 	Process *claude.Session
 	Gone    bool
 
-	// PID is the tool's own process id, from session.started.
-	PID int
+	// PID is the tool's own process id, from session.started; pidAt is when that event came.
+	PID   int
+	pidAt time.Time
 
 	// Waiting is why the session last said it waits (session.waiting: input or permission), until
 	// a later event from it; WaitingSince is when.
@@ -170,6 +179,13 @@ type Session struct {
 	Compactions int
 	Memory      int
 	MemoryFile  string
+
+	// Condition is the latest session.condition, or a fatigue reading worked out from the
+	// transcript for an open session without one.
+	Condition *Condition
+
+	// Load is the session process's CPU and memory with everything under it.
+	Load *procs.Usage
 
 	Subagents []*Session
 	Units     []*Session
@@ -223,6 +239,14 @@ type Machine struct {
 	JobsRunning    int
 	RunsUnfinished int
 	RunnersAlive   int
+
+	// Open sessions by fatigue, from records or worked out.
+	Tiring    int
+	Tired     int
+	Exhausted int
+
+	// Load is the latest sample of the machine's CPU and memory, and of this app's own.
+	Load procs.Reading
 
 	// TokensToday sums tokens reported today, by tool name.
 	TokensToday map[string]int64

@@ -38,6 +38,9 @@ type Config struct {
 	// OtherWork shows Claude Code sessions that no event names, dimmed. The o key toggles it.
 	OtherWork bool `toml:"other_work"`
 
+	// Stats shows the panels across the top (counts, machine, runs, tokens). The s key toggles it.
+	Stats bool `toml:"stats"`
+
 	// RetentionDays is how long history is kept. History is not written yet.
 	RetentionDays int `toml:"retention_days"`
 }
@@ -66,6 +69,7 @@ func Default() Config {
 		Recent:        Duration{48 * time.Hour},
 		Quiet:         Duration{15 * time.Minute},
 		OtherWork:     true,
+		Stats:         true,
 		RetentionDays: 90,
 	}
 }

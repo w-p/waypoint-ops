@@ -80,6 +80,13 @@ func (v *view) runDetail(item *model.Item) []string {
 	}
 	limits = append(limits, "tool "+r.Tool.Name+" "+r.Tool.Version)
 	lines = append(lines, v.field("run", strings.Join(limits, " · ")))
+	if r.Load != nil {
+		lines = append(lines, v.loadLine(r.Load, "runner"))
+	}
+	if u := r.Running(); u != nil && u.Condition != nil {
+		lines = append(lines, v.field("unit "+u.ID, v.s.dim.Render("condition of the running unit")))
+		lines = append(lines, v.conditionLines(u.Condition)...)
+	}
 	lines = append(lines, v.unitTable(r)...)
 
 	for _, j := range r.Jobs {
@@ -232,6 +239,10 @@ func (v *view) sessionDetail(item *model.Item) []string {
 	case s.PID > 0:
 		lines = append(lines, v.field("process", fmt.Sprintf("pid %d", s.PID)+v.s.dim.Render(" (from session.started)")))
 	}
+	if s.Load != nil {
+		lines = append(lines, v.loadLine(s.Load, "process"))
+	}
+	lines = append(lines, v.conditionLines(s.Condition)...)
 	modelName := s.Model
 	if a := s.Activity; a != nil && a.Model != "" {
 		modelName = a.Model // the transcript knows if the model changed mid-session

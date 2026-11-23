@@ -134,7 +134,8 @@ How the app reads them:
 - **`session.active`** counts as activity, so a session without a transcript reader shows active or
   silent by it.
 - **The session `pid`** decides gone when Claude Code's list cannot (another tool, or the list not
-  read): a dead pid with no `session.ended` is gone. Pid reuse is not guarded against yet.
+  read): a dead pid with no `session.ended` is gone. For load, a pid whose process started after
+  the event that named it is taken as reused and ignored (2026-11-23).
 - **A unit's transcript** is followed from `unit.started`, so the run row shows what the running
   unit does ("unit 2 · Edit view.go"), the unit table shows its live tokens and tool, and its token
   use lands on the graph when it happens. Its subagents come from its transcript folder, as for
@@ -144,3 +145,10 @@ How the app reads them:
   before `session.ended`; it neither ends a wait nor counts as activity.
 - **`job.ended`** carries `exit_code` when the pilot's job wrapper recorded it; without it, the code
   is unknown.
+
+## `session.condition` (2026-11-23)
+
+Not proposed by this app: the pilot added it (replacing its first `session.fatigue`, which no
+reader had used) with fatigue, drift, unsaved work, two flags and the measures. The app shows the
+latest record per session and works out fatigue only for sessions without one, marked `≈`, as the
+contract allows. Design: `session-condition.md`.

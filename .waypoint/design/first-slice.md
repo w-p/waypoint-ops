@@ -86,7 +86,27 @@ more graphic look in the manner of htop and bpytop, using Lip Gloss and Harmonic
   filled for live, hollow for ended, up to five, then live of total.
 - **Narrow terminals.** Columns leave in this order until the board fits: tool, started, model, job,
   tokens, subagents, elapsed, kind. The state column takes any spare width. This settles the drop
-  order provisionally (`conops.md` §8 #3).
+  order provisionally (`conops.md` §8 #3). Since 2026-11-23 the columns flex (see below).
+- **Responsive screen (2026-11-23, the developer's request: "resize and relayout like a responsive
+  web page").** The top panels (status, machine, runs, tokens) flex like the board's columns: the
+  machine and runs panels grow, their gauges with them; the status panel and the token graph keep
+  their set widths unless alone in a row (the graph's hourly bars are one to four cells wide). The
+  panels go in as few rows as fit them at their minimums, in order, split where the rows balance
+  best: one row from 158 columns, then status and machine above runs and tokens, then runs and tokens
+  on rows of their own, then one panel per row. They are never dropped (the developer, the same
+  day). The `s` key, or `stats = false` in the settings, hides them; they also give way to one
+  summary line under 40 columns or when stacking them would leave the board and detail fewer than
+  12 rows, and that line then says the stats need a taller screen. From 230 columns the detail panel
+  sits beside the board (60 to 100 wide, the board keeping 170) at the full height of the work
+  area. Detail lines too long for their panel wrap under their label.
+- **Flexing columns (2026-11-23, the developer's suggestion).** Each column has a preferred width,
+  a minimum and a share of spare room, as flexbox items do, and asks for no more than its widest
+  cell (or its title), so a column of dashes gives its room away. The state column takes the spare
+  room and, being read first, gives way last: on a narrow screen the other columns shrink toward
+  their minimums, cutting their text with `…`, before it does. Columns are dropped, in the order
+  above (load now sits after model), only when every column at its minimum would not fit: about 155
+  columns with full cells, fewer when cells are short. Column widths follow the cells on screen, so a
+  column can widen or narrow when a row comes or goes.
 - **Keys.** Only on a bar along the bottom, htop style (key, then its label on a colored block);
   `esc All` appears there only while focused. The clock and refresh interval sit at its right.
 - **Animation (Harmonica).** Springs fill the run gauges and raise the token bars when they first

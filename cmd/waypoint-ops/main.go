@@ -121,8 +121,10 @@ func run() error {
 		Clock:    clock,
 		Still:    *once,
 		Live:     *at == "",
+		Load:     *at == "",
 
 		OtherWork: cfg.OtherWork,
+		HideStats: !cfg.Stats,
 	})
 	if *focus != "" {
 		app.Focus(*focus)

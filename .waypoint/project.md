@@ -36,6 +36,11 @@
 - Reads the adopted contract additions: repeated `session.started` (resume), `session.waiting`,
   `session.active`, `session.model`, the session pid (gone when dead), and units' transcripts live
   from `unit.started` (`design/contract-proposals.md`, "Adopted"). Released as v0.2.0.
+- Session condition and machine load, built 2026-11-23 to try out: a CONDITION column (fatigue
+  and one flag) from the pilot's `session.condition`, a fatigue reading worked out from the
+  transcript (marked `≈`) for sessions without one, a machine panel (CPU, memory, sessions tiring or
+  worse, the app's own use) and per-session and per-run CPU and memory. Windows builds again; CI
+  tests on macOS and Windows (`design/session-condition.md`). Not yet released.
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
