@@ -6,6 +6,12 @@ sorted to the top; healthy work takes one line. It only reads: it never writes i
 
 It reads Waypoint's session-events contract (each project's `.waypoint/events/`), version 1.
 
+## Install
+
+Download the archive for your system from the GitHub releases page (Linux and macOS, Intel and
+ARM; on Windows, use WSL), check it against `checksums.txt`, unpack it, and put `waypoint-ops`
+on your PATH. `waypoint-ops -version` says which release you have.
+
 ## Build and run
 
     go build -o waypoint-ops ./cmd/waypoint-ops
@@ -43,6 +49,16 @@ longer running is shown as gone. Running Claude Code sessions that no event name
 watched project they run in; those outside every watched project (projects without Waypoint,
 scratch folders) are other work: dimmed, below the rest, under their folder's name. This is skipped when viewing the past
 with `-at`.
+
+## Releasing
+
+Add a section for the new version to `CHANGELOG.md`, commit, then tag and push the tag:
+
+    git tag v0.2.0 && git push origin v0.2.0
+
+The release workflow tests, builds the four archives with their checksums, and publishes a
+GitHub release whose notes are that changelog section. Every push and pull request to `main` runs
+formatting, vet, the tests with the race detector, and the builds.
 
 ## Status
 

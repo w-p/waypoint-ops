@@ -25,6 +25,9 @@ With folders given, those are watched; otherwise the projects in the settings fi
 Flags:
 `
 
+// version is set by the release build (-ldflags "-X main.version=v0.1.0").
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintln(os.Stderr, "waypoint-ops:", err)
@@ -48,11 +51,16 @@ func run() error {
 	height := flag.Int("height", 50, "frame height with -once")
 	focus := flag.String("focus", "", "start focused on this project")
 	selectRow := flag.Int("select", 0, "start with this board row selected, counting from 1")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Usage = func() {
 		fmt.Fprint(flag.CommandLine.Output(), usage)
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+	if *showVersion {
+		fmt.Println("waypoint-ops", version)
+		return nil
+	}
 
 	cfg, found, err := config.Load(*path)
 	if err != nil {

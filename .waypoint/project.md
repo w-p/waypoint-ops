@@ -29,6 +29,10 @@
   unit (`design/other-work.md`). Committed with the running-session list (`7516ada`).
 - Subagents read from their own transcripts (running, handed back), so sessions without events
   show their subagents (`design/transcript-reader.md`).
+- Releases and CI, set up but not yet pushed: CI on every push and pull request; a `vX.Y.Z` tag
+  builds Linux and macOS archives and publishes a GitHub release from `CHANGELOG.md`
+  (`design/releases.md`). The GitHub repository is public and empty; what to publish is the
+  developer's call (memory 2026-11-22).
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
@@ -80,6 +84,7 @@
   the pilot project
 - Overview mockup: `.waypoint/design/mockups/overview.py`
 - Transcript reader: `.waypoint/design/transcript-reader.md`
+- Releases and CI: `.waypoint/design/releases.md`
 - Other work: `.waypoint/design/other-work.md`
 - Pending contract proposals (approved, not yet in the contract): `.waypoint/design/contract-proposals.md`
 
