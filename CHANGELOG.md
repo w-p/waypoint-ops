@@ -2,6 +2,18 @@
 
 What changed between releases, newest first.
 
+## Unreleased
+
+- **Session events from Waypoint's hooks.** A session waiting on a permission prompt is
+  highlighted in amber and one waiting for input shows as waiting, for any tool whose hooks write
+  `session.waiting`, not only Claude Code. A session whose recorded process is gone, with no end
+  written, moves to finished work. A resumed session stays one session with its original start.
+- **Run units, live.** The run's row shows what its running unit is doing ("unit 2 · Edit
+  view.go"), and the unit table shows its live tokens and tool.
+- **Models** come from the hooks' `session.model` events as well as the transcript.
+- To see these, restart sessions in a project after updating its Waypoint hooks; sessions started
+  earlier write no events.
+
 ## 0.1.0 (2026-11-22)
 
 The first release: one terminal view of every agent session and run across your projects.

@@ -90,9 +90,25 @@ type Unit struct {
 	Tokens            *events.Tokens
 	PermissionDenials int
 	Transcript        string
+	TranscriptFormat  string
 
 	// Session is the unit's hook-written session, when one exists.
 	Session *Session
+
+	// Activity is what a transcript reader found in the unit's transcript.
+	Activity *transcript.Activity
+}
+
+// TranscriptAt is where the unit's transcript is and how it is written: from the runner's events,
+// or else from the unit's hook-written session.
+func (u *Unit) TranscriptAt() (path, format string) {
+	if u.Transcript != "" {
+		return u.Transcript, u.TranscriptFormat
+	}
+	if s := u.Session; s != nil && s.Transcript != "" {
+		return s.Transcript, s.TranscriptFormat
+	}
+	return "", ""
 }
 
 // Job is a machine job a unit launched.
@@ -129,6 +145,14 @@ type Session struct {
 	Process *claude.Session
 	Gone    bool
 
+	// PID is the tool's own process id, from session.started.
+	PID int
+
+	// Waiting is why the session last said it waits (session.waiting: input or permission), until
+	// a later event from it; WaitingSince is when.
+	Waiting      string
+	WaitingSince time.Time
+
 	// Listed marks a session no event names, known only from a tool's own list of its running
 	// sessions; Folder is where it runs. Inside a watched project it shows like any session (its
 	// project may not write events yet). Other marks one outside every watched project: other
@@ -155,6 +179,9 @@ type Session struct {
 
 	// readSubagents is set when Subagents came from the transcript rather than from events.
 	readSubagents bool
+
+	// started is set once a session.started was seen, so a resume does not move the start.
+	started bool
 }
 
 // Open reports whether no end has been seen for the session.
@@ -231,6 +258,9 @@ type Snapshot struct {
 	Recent []*Item
 
 	Machine Machine
+
+	// Listed is set when Claude Code's list of running sessions was read for this snapshot.
+	Listed bool
 }
 
 var stamp = regexp.MustCompile(`-\d{8}-\d{6}$`)
@@ -251,12 +281,16 @@ func (r *Run) Elapsed(now time.Time) time.Duration {
 	return now.Sub(r.Started)
 }
 
-// Tokens is the sum of every unit's tokens.
+// Tokens is the sum of every unit's tokens: the reported total for units that ended, the
+// transcript's running count for one still working.
 func (r *Run) Tokens() int64 {
 	var total int64
 	for _, u := range r.Units {
-		if u.Tokens != nil {
+		switch {
+		case u.Tokens != nil:
 			total += u.Tokens.Total()
+		case u.Activity != nil:
+			total += u.Activity.Tokens.Total()
 		}
 	}
 	return total

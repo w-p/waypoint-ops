@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/w-p/waypoint-ops/internal/model"
+	"github.com/w-p/waypoint-ops/internal/transcript"
 )
 
 // detailTitle names the selected item in the detail panel's border.
@@ -153,8 +154,11 @@ func (v *view) unitTable(r *model.Run) []string {
 		if u.Turns > 0 {
 			turns = fmt.Sprint(u.Turns)
 		}
-		if u.Tokens != nil {
+		switch {
+		case u.Tokens != nil:
 			tokens = count(u.Tokens.Total())
+		case u.Activity != nil && u.Activity.Tokens.Total() > 0:
+			tokens = count(u.Activity.Tokens.Total())
 		}
 		if u.Session != nil {
 			memory = fmt.Sprint(u.Session.Memory)
@@ -171,7 +175,11 @@ func (v *view) unitTable(r *model.Run) []string {
 		if glyph == "" {
 			glyph = "?"
 		}
-		values := []string{u.ID, u.Name, glyph + " " + word, started, took, turns, tokens, memory, u.Reason}
+		reason := u.Reason
+		if a := u.Activity; u.Status == model.Working && a != nil && a.Turn == transcript.Working {
+			reason = strings.TrimPrefix(doing(a, " · "), " · ")
+		}
+		values := []string{u.ID, u.Name, glyph + " " + word, started, took, turns, tokens, memory, reason}
 		var cells []string
 		for i, c := range cols {
 			text := fit(values[i], c.width, c.right)
@@ -217,8 +225,12 @@ func (v *view) sessionDetail(item *model.Item) []string {
 		case s.Listed:
 			lines = append(lines, v.field("waypoint", v.s.dim.Render("no events yet: known from claude agents, running in "+s.Folder)))
 		}
+	case s.Gone && s.PID > 0 && !(s.Tool.Name == "claude-code" && v.snap.Listed):
+		lines = append(lines, v.field("process", v.s.dim.Render(fmt.Sprintf("pid %d is not running", s.PID))))
 	case s.Gone:
 		lines = append(lines, v.field("process", v.s.dim.Render("not running (claude agents does not list it)")))
+	case s.PID > 0:
+		lines = append(lines, v.field("process", fmt.Sprintf("pid %d", s.PID)+v.s.dim.Render(" (from session.started)")))
 	}
 	modelName := s.Model
 	if a := s.Activity; a != nil && a.Model != "" {

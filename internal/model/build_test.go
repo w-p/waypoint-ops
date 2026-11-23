@@ -509,3 +509,117 @@ func TestTranscriptSubagents(t *testing.T) {
 		t.Errorf("subagents %d live %d machine %d; want 3, 1, 1", len(s.Subagents), s.Live(), snap.Machine.SubagentsLive)
 	}
 }
+
+func TestSessionEventsFromHooks(t *testing.T) {
+	session := func(fill func(*events.Event)) func(*events.Event) {
+		return func(e *events.Event) {
+			e.Session = &events.Session{ID: "s1", Kind: events.Interactive}
+			if fill != nil {
+				fill(e)
+			}
+		}
+	}
+	waiting := func(reason string) func(*events.Event) {
+		return session(func(e *events.Event) { e.Reason = reason })
+	}
+	withPID := session(func(e *events.Event) { e.PID = 7 })
+	busy := claude.List{OK: true, Sessions: map[string]claude.Session{"s1": {SessionID: "s1", Status: claude.Busy}}}
+	tests := []struct {
+		name      string
+		list      []events.Event
+		alive     bool
+		running   claude.List
+		category  Category
+		attention bool
+		gone      bool
+	}{
+		{"waiting on a permission prompt is flagged for attention",
+			[]events.Event{ev(0, events.SessionStarted, "", session(nil)), ev(2, events.SessionWaiting, "", waiting(events.WaitPermission))},
+			false, claude.List{}, Flagged, true, false},
+		{"a later event ends the wait",
+			[]events.Event{ev(0, events.SessionStarted, "", session(nil)), ev(2, events.SessionWaiting, "", waiting(events.WaitPermission)), ev(3, events.SessionActive, "", session(nil))},
+			false, claude.List{}, Active, false, false},
+		{"a model event does not end the wait",
+			[]events.Event{ev(0, events.SessionStarted, "", session(nil)), ev(2, events.SessionWaiting, "", waiting(events.WaitPermission)),
+				ev(3, events.SessionModel, "", session(func(e *events.Event) { e.Model = "claude-opus-5-5" }))},
+			false, claude.List{}, Flagged, true, false},
+		{"waiting for input is waiting",
+			[]events.Event{ev(0, events.SessionStarted, "", session(nil)), ev(2, events.SessionWaiting, "", waiting(events.WaitInput))},
+			false, claude.List{}, Waiting, false, false},
+		{"Claude Code's own list wins over a wait event",
+			[]events.Event{ev(0, events.SessionStarted, "", session(nil)), ev(2, events.SessionWaiting, "", waiting(events.WaitPermission))},
+			false, busy, Active, false, false},
+		{"a dead pid is gone",
+			[]events.Event{ev(0, events.SessionStarted, "", withPID)},
+			false, claude.List{}, Quiet, false, true},
+		{"a live pid stays open",
+			[]events.Event{ev(0, events.SessionStarted, "", withPID)},
+			true, claude.List{}, Active, false, false},
+		{"Claude Code's list decides before the pid",
+			[]events.Event{ev(0, events.SessionStarted, "", withPID)},
+			false, busy, Active, false, false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			snap := Build([]*events.Project{project(nil, tt.list...)}, Options{
+				Now: at(5), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
+				Alive: func(int) bool { return tt.alive }, Running: tt.running,
+			})
+			rows := snap.Items
+			if tt.gone {
+				rows = snap.Recent
+			}
+			if len(rows) != 1 {
+				t.Fatalf("items %d recent %d", len(snap.Items), len(snap.Recent))
+			}
+			item := rows[0]
+			if item.Category != tt.category || item.Attention != tt.attention || item.Session.Gone != tt.gone {
+				t.Errorf("category %d attention %v gone %v; want %d %v %v", item.Category, item.Attention, item.Session.Gone, tt.category, tt.attention, tt.gone)
+			}
+		})
+	}
+}
+
+func TestResumedSession(t *testing.T) {
+	start := func(source string) func(*events.Event) {
+		return func(e *events.Event) {
+			e.Session = &events.Session{ID: "s1", Kind: events.Interactive}
+			e.Source = source
+		}
+	}
+	p := project(nil,
+		ev(0, events.SessionStarted, "", start("startup")),
+		ev(10, events.SessionEnded, "", hook("s1", events.Interactive, "")),
+		ev(20, events.SessionStarted, "", start("resume")),
+	)
+	snap := build(p, 25)
+	if len(snap.Items) != 1 {
+		t.Fatalf("items %d recent %d; want the resumed session open", len(snap.Items), len(snap.Recent))
+	}
+	s := snap.Items[0].Session
+	if !s.Open() || !s.Started.Equal(at(0)) {
+		t.Errorf("open %v started %v; want open, started at the first start", s.Open(), s.Started)
+	}
+}
+
+func TestUnitTranscript(t *testing.T) {
+	path := "/t/u1.jsonl"
+	p := project(map[string]int{"r": 42},
+		ev(0, events.RunStarted, "r", started("1")),
+		ev(1, events.UnitStarted, "r", func(e *events.Event) {
+			unit("1", "u1")(e)
+			e.Transcript = &events.Transcript{Path: path, Format: transcript.FormatClaudeCode}
+		}),
+	)
+	act := &transcript.Activity{Last: at(4), Turn: transcript.Working, Tool: "Edit", Target: "a.go",
+		Tokens: events.Tokens{Input: 100, Output: 50}, Spend: []transcript.Spend{{At: at(3), Tokens: 150}}}
+	snap := Build([]*events.Project{p}, Options{Now: at(5), Recent: 24 * time.Hour, Quiet: 10 * time.Minute,
+		Alive: func(pid int) bool { return pid == 42 }, Activity: map[string]*transcript.Activity{path: act}})
+	r := snap.Items[0].Run
+	if r.Units[0].Activity != act || r.Tokens() != 150 {
+		t.Errorf("unit activity %v, run tokens %d; want the transcript's, 150", r.Units[0].Activity != nil, r.Tokens())
+	}
+	if len(snap.Machine.Spend) != 1 || snap.Machine.Spend[0].Tokens != 150 {
+		t.Errorf("spend %+v; want the unit's per-minute use", snap.Machine.Spend)
+	}
+}

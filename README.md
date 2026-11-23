@@ -40,7 +40,7 @@ For looking at recorded data: `-at 2026-11-21T14:02:00-05:00` views it as of tha
 prints a single frame (`-width`, `-height`) instead of running the screen, and `-select 3` starts
 with that board row selected.
 
-Claude Code sessions whose events name a transcript are followed live: the board shows whether
+Claude Code sessions and run units whose events name a transcript are followed live: the board shows whether
 each is working (and on which tool) or waiting for input, with live token counts and context size.
 Only tool names and file base names are shown, never prompts, replies or commands.
 Every 5 seconds the app also asks Claude Code which sessions are running (`claude agents --json`):
@@ -62,5 +62,5 @@ formatting, vet, the tests with the race detector, and the builds.
 
 ## Status
 
-Working version, being reshaped by review. Not yet: history files and transcripts of run units.
+Working version, being reshaped by review. Not yet: history files.
 Subagents are read from their transcripts beside the session's. Below about 175 columns the board drops its least needed columns.

@@ -288,6 +288,12 @@ func (v *view) runState(item *model.Item) string {
 		if u.Name != "" {
 			text += ": " + u.Name
 		}
+		if a := u.Activity; a != nil && a.Turn == transcript.Working && a.Tool != "" {
+			text = fmt.Sprintf("unit %s%s", u.ID, doing(a, " · "))
+			if u.Name != "" {
+				text += " · " + u.Name
+			}
+		}
 		if item.Flag != "" {
 			text = item.Flag + " · " + text
 		}
@@ -523,6 +529,12 @@ func sessionState(s *model.Session, now time.Time, quiet time.Duration) string {
 			}
 			return "waiting for input · " + span(now.Sub(since))
 		}
+	}
+	switch s.Waiting {
+	case events.WaitPermission:
+		return "waiting on permission prompt · " + span(now.Sub(s.WaitingSince))
+	case events.WaitInput:
+		return "waiting for input · " + span(now.Sub(s.WaitingSince))
 	}
 	if a == nil {
 		return "open · last event " + ago(s.Last, now)

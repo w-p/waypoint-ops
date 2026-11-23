@@ -189,19 +189,31 @@ func (a *App) readTranscripts() tea.Cmd {
 	}
 	now := a.opt.Clock()
 	batch := map[string]*transcript.Reader{}
-	for _, item := range append(append([]*model.Item{}, a.snap.Items...), a.snap.Recent...) {
-		s := item.Session
-		if s == nil || s.Transcript == "" || !transcript.Supported(s.TranscriptFormat) {
-			continue
+	want := func(path, format string) {
+		if path == "" || !transcript.Supported(format) {
+			return
 		}
-		if !s.Open() && now.Sub(s.Ended) > transcriptWindow {
-			continue
-		}
-		r := a.readers[s.Transcript]
+		r := a.readers[path]
 		if r == nil {
-			r = transcript.NewReader(s.Transcript)
+			r = transcript.NewReader(path)
 		}
-		batch[s.Transcript] = r
+		batch[path] = r
+	}
+	for _, item := range append(append([]*model.Item{}, a.snap.Items...), a.snap.Recent...) {
+		if r := item.Run; r != nil {
+			// Units' transcripts: the one running, and those that ended within the window.
+			for _, u := range r.Units {
+				if u.Status == model.Working || (!u.Started.IsZero() && now.Sub(u.Started.Add(u.Took)) <= transcriptWindow) {
+					want(u.TranscriptAt())
+				}
+			}
+			continue
+		}
+		s := item.Session
+		if s == nil || (!s.Open() && now.Sub(s.Ended) > transcriptWindow) {
+			continue
+		}
+		want(s.Transcript, s.TranscriptFormat)
 	}
 	a.readers = batch // readers no longer wanted are dropped
 	if len(batch) == 0 {

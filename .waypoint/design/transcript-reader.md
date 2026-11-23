@@ -47,8 +47,10 @@ free of file reading beyond what it is handed.
 
 ## Left out
 
-Units' transcripts (a unit's session id is not known until it ends, `conops.md` §8 #5).
-Subagents' transcripts were left out at first; see the end of this note. Telling a session waiting on a permission prompt from one running a long
+Units' transcripts were left out at first, because a unit's session id was only known when it
+ended; since 2026-11-22 `unit.started` carries the id and transcript path, and units are read
+live (`contract-proposals.md`, "Adopted"). Subagents' transcripts were left out at first; see the
+end of this note. Telling a session waiting on a permission prompt from one running a long
 tool: both read as working on that tool.
 
 ## Where it stands (2026-11-22, built)

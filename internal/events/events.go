@@ -21,6 +21,9 @@ const (
 	JobStarted       = "job.started"
 	JobEnded         = "job.ended"
 	SessionStarted   = "session.started"
+	SessionWaiting   = "session.waiting"
+	SessionActive    = "session.active"
+	SessionModel     = "session.model"
 	SessionCompacted = "session.compacted"
 	SessionMemory    = "session.memory_written"
 	SessionEnded     = "session.ended"
@@ -106,7 +109,17 @@ type Event struct {
 
 	// session.memory_written
 	File string `json:"file"`
+
+	// session.started: startup, resume or clear. A resumed session writes session.started again
+	// under the same id.
+	Source string `json:"source"`
 }
+
+// Reasons a session waits (session.waiting).
+const (
+	WaitInput      = "input"
+	WaitPermission = "permission"
+)
 
 // Duration is DurationS as a time.Duration.
 func (e Event) Duration() time.Duration {

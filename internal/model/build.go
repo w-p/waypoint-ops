@@ -72,6 +72,7 @@ func Build(projects []*events.Project, opt Options) Snapshot {
 	snap := Snapshot{
 		Now:     opt.Now,
 		Machine: Machine{TokensToday: map[string]int64{}},
+		Listed:  opt.Running.OK,
 	}
 	var builders []*builder
 	for _, p := range projects {
@@ -397,6 +398,10 @@ func (b *builder) addRun(e events.Event) {
 		if e.Session != nil {
 			u.SessionID = e.Session.ID
 		}
+		if e.Transcript != nil {
+			u.Transcript = e.Transcript.Path
+			u.TranscriptFormat = e.Transcript.Format
+		}
 	case events.UnitEnded:
 		u := r.unit(e.Unit)
 		u.Status = e.Status
@@ -411,6 +416,7 @@ func (b *builder) addRun(e events.Event) {
 		}
 		if e.Transcript != nil {
 			u.Transcript = e.Transcript.Path
+			u.TranscriptFormat = e.Transcript.Format
 		}
 	case events.JobStarted:
 		r.Jobs = append(r.Jobs, &Job{Unit: e.Unit, PID: e.PID, Log: e.Log, Started: e.TS})
@@ -434,18 +440,51 @@ func (b *builder) addRun(e events.Event) {
 
 func (b *builder) addSession(e events.Event) {
 	s := b.session(e.Session)
+	if e.Type == events.SessionModel {
+		// The model is read from the transcript after the fact, so this event can land after a
+		// session.waiting or just before session.ended. It says nothing about activity or waits.
+		if e.Model != "" {
+			s.Model = e.Model
+		}
+		if s.Tool.Name == "" {
+			s.Tool = e.Tool
+		}
+		return
+	}
 	s.Last = e.TS
 	if s.Tool.Name == "" {
 		s.Tool = e.Tool
 	}
+	if e.Type != events.SessionWaiting {
+		// Any later event from the session shows it moved on from a wait.
+		s.Waiting = ""
+		s.WaitingSince = time.Time{}
+	}
 	switch e.Type {
 	case events.SessionStarted:
-		s.Started = e.TS
-		s.Model = e.Model
+		if !s.started {
+			s.Started = e.TS
+			s.started = true
+		} else if !s.Ended.IsZero() && e.TS.After(s.Ended) {
+			// Resumed after it ended: the same session, open again. Its next end reports the
+			// whole session.
+			s.Ended = time.Time{}
+			s.Duration = 0
+			s.Tokens = nil
+		}
+		if e.Model != "" {
+			s.Model = e.Model
+		}
+		if e.PID > 0 {
+			s.PID = e.PID
+		}
 		if e.Transcript != nil {
 			s.Transcript = e.Transcript.Path
 			s.TranscriptFormat = e.Transcript.Format
 		}
+	case events.SessionWaiting:
+		s.Waiting = e.Reason
+		s.WaitingSince = e.TS
 	case events.SessionCompacted:
 		s.Compactions++
 	case events.SessionMemory:
@@ -536,7 +575,21 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 	for _, name := range b.order {
 		r := b.runs[name]
 		for _, u := range r.Units {
-			if u.Tokens != nil {
+			if path, _ := u.TranscriptAt(); path != "" {
+				u.Activity = opt.Activity[path]
+			}
+			if a := u.Activity; a != nil {
+				// The transcript says when the unit used its tokens, not just how many at the end.
+				for _, sp := range a.Spend {
+					snap.spend(sp.At, r.Tool.Name, sp.Tokens, opt.Now)
+				}
+				if u.Session != nil {
+					subagents(u.Session, a, opt.Now)
+					if u.Session.readSubagents && r.State != Finished && r.State != Died {
+						snap.Machine.SubagentsLive += u.Session.Live()
+					}
+				}
+			} else if u.Tokens != nil {
 				end := u.Started.Add(u.Took)
 				if today(end) {
 					snap.Machine.TokensToday[r.Tool.Name] += u.Tokens.Total()
@@ -599,10 +652,20 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 		if s.joined {
 			continue
 		}
-		if s.Open() && s.Tool.Name == "claude-code" && opt.Running.OK {
-			if p, ok := opt.Running.Sessions[s.ID]; ok {
-				s.Process = &p
-			} else if s.Kind == events.Interactive && opt.local(s.Transcript) {
+		if s.Open() {
+			// Claude Code's own list decides when it can (this machine's sessions); otherwise the
+			// pid from session.started does, as the contract says.
+			decided := false
+			if s.Tool.Name == "claude-code" && opt.Running.OK {
+				if p, ok := opt.Running.Sessions[s.ID]; ok {
+					s.Process = &p
+					decided = true
+				} else if s.Kind == events.Interactive && opt.local(s.Transcript) {
+					s.Gone = true
+					decided = true
+				}
+			}
+			if !decided && s.Kind == events.Interactive && s.PID > 0 && !opt.Alive(s.PID) {
 				s.Gone = true
 			}
 		}
@@ -616,10 +679,15 @@ func (b *builder) place(snap *Snapshot, opt Options) {
 			snap.Recent = append(snap.Recent, item)
 			continue
 		}
-		if p := s.Process; p != nil && p.Blocked() {
+		switch p := s.Process; {
+		case p != nil && p.Blocked():
 			item.Category = Flagged
 			item.Attention = true
 			item.Flag = waitingFlag(*p)
+		case p == nil && s.Waiting == events.WaitPermission:
+			item.Category = Flagged
+			item.Attention = true
+			item.Flag = "waiting on permission prompt"
 		}
 		if s.Open() {
 			if !item.Attention {
@@ -650,6 +718,9 @@ func sessionCategory(s *Session, opt Options) Category {
 		case claude.Idle:
 			return Waiting
 		}
+	}
+	if s.Waiting == events.WaitInput {
+		return Waiting
 	}
 	silent := opt.Now.Sub(s.Last) > opt.Quiet
 	if a := s.Activity; a != nil {

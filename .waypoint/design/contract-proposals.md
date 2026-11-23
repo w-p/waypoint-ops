@@ -1,8 +1,9 @@
 # Proposed changes to the session-events contract
 
-**Status:** Approved by the developer 2026-11-21 for proposal. Not yet in the contract. The
-contract is Waypoint's, drafted in the pilot repository (`.waypoint/design/session-events.md`,
-the pilot project); this file holds waypoint-ops' requests until that document takes them.
+**Status:** Adopted. All four proposals are in the contract as of 2026-11-22, and the pilot's
+runner and hooks write them; the app reads them (see "Adopted" at the end). The contract is
+Waypoint's, drafted in the pilot repository (`.waypoint/design/session-events.md`); this file
+keeps the reasoning.
 
 **Timing:** apply to the pilot document after its 2026-11-22 chain finishes. A modified tracked
 file in the pilot stops a waiting chain. Sent to the interactive pilot session on 2026-11-22, with
@@ -54,7 +55,6 @@ than any hook. For those sessions `session.waiting` and `session.active` are a f
 still wanted for:
 
 - other tools (Cursor, Codex), which have no such list that the app can ask;
-- sessions on another machine, whose event files arrive with the repository;
 - the record: the list says only what is happening now, so past waits (how long a run sat on a
   prompt overnight) exist only as events;
 - readers that do not ask Claude Code at all.
@@ -113,3 +113,34 @@ narrowed by the start time; it stays only until the runner writes the id.
 
 Freeze start and end events for machine jobs, and other tools' hooks: revisit when the code that
 would write them is built (`conops.md` §8).
+
+## Adopted (2026-11-22)
+
+The pilot took all four into the contract and writes them: the runner launches units with
+`--session-id` and puts the session and an absolute transcript path in `unit.started`; hooks write
+`session.started` (with `pid` and `source`: startup, resume or clear), `session.waiting`,
+`session.active` (at most once a minute, and at once after a wait), compactions, memory writes and
+`session.ended` with tokens. One correction from the pilot: event files are git-ignored and never
+travel with the repository, so the "sessions on another machine" case in §1 does not exist and was
+removed.
+
+How the app reads them:
+
+- **A repeated `session.started`** (resume or clear) continues the same session: the start time
+  stays, and a session that had ended is open again; its next `session.ended` reports the whole.
+- **`session.waiting`** holds until any later event from the session. `permission` is flagged for
+  attention in amber, like a permission prompt from Claude Code's list; `input` is waiting. Claude
+  Code's own list wins when it has the session, because it is read every few seconds.
+- **`session.active`** counts as activity, so a session without a transcript reader shows active or
+  silent by it.
+- **The session `pid`** decides gone when Claude Code's list cannot (another tool, or the list not
+  read): a dead pid with no `session.ended` is gone. Pid reuse is not guarded against yet.
+- **A unit's transcript** is followed from `unit.started`, so the run row shows what the running
+  unit does ("unit 2 · Edit view.go"), the unit table shows its live tokens and tool, and its token
+  use lands on the graph when it happens. Its subagents come from its transcript folder, as for
+  sessions.
+- **`session.model`** (added by the pilot the same evening) sets the session's model. The hook
+  reads it from the transcript after the fact, so it can land after a `session.waiting` or just
+  before `session.ended`; it neither ends a wait nor counts as activity.
+- **`job.ended`** carries `exit_code` when the pilot's job wrapper recorded it; without it, the code
+  is unknown.

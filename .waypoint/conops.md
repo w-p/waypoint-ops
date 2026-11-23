@@ -252,11 +252,11 @@ Pending proposals are kept in `.waypoint/design/contract-proposals.md`.
 
 | # | Question | Owner | Needed By |
 |---|----------|-------|-----------|
-| 1 | Will the contract take the proposals in `.waypoint/design/contract-proposals.md` (waiting and activity events, a session pid, liveness by pid with jobs included)? Approved by the developer; awaiting the contract. | Waypoint contract | Before sessions show live state |
+| 1 | Will the contract take the proposals in `.waypoint/design/contract-proposals.md` (waiting and activity events, a session pid, liveness by pid with jobs included)? Approved by the developer; awaiting the contract. | Waypoint contract | Answered 2026-11-22: adopted (`design/contract-proposals.md`) |
 | 2 | How does finished work leave the overview: a time window, or each project's last run until a newer one starts? | Developer | Judged live, during Execution |
 | 3 | In what order do columns drop on narrow terminals? (Proposed: tool, model, started first.) | Developer | Design |
 | 4 | A job frozen by a quiet window is only known afterwards (`frozen_s`). Should the runner write an event when a freeze starts and ends? | Waypoint contract | Later |
-| 5 | Can a unit's session id be known at start, so its transcript can be followed live? | Waypoint contract | Later |
+| 5 | Can a unit's session id be known at start, so its transcript can be followed live? | Waypoint contract | Answered 2026-11-22: yes, `--session-id`; adopted (`design/contract-proposals.md` §4) |
 | 6 | Do Cursor and other tools expose hooks, and what do their headless modes report? | Waypoint contract | When their writers are built |
 
 Decided 2026-11-21: no setting for the subscription's token limit in v1; the machine line shows

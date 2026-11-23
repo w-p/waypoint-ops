@@ -33,6 +33,9 @@
   builds Linux and macOS archives and publishes a GitHub release from `CHANGELOG.md`
   (`design/releases.md`). The GitHub repository is public; history was scrubbed of private
   project names before the first push (memory 2026-11-22).
+- Reads the adopted contract additions: repeated `session.started` (resume), `session.waiting`,
+  `session.active`, `session.model`, the session pid (gone when dead), and units' transcripts live
+  from `unit.started` (`design/contract-proposals.md`, "Adopted"). Not released yet.
 - In daily use from 2026-11-22 against the developer's 11 Waypoint projects (settings file outside
   the repo). No project writes events yet, so the board shows live Claude Code sessions only; runs
   appear once the pilot's runner writes events (`contract-proposals.md` §4).
